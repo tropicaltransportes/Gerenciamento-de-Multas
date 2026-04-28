@@ -370,18 +370,26 @@
   .chart-slider {
     position: relative;
     overflow: hidden;
+    flex: 1;
   }
   .chart-slider-track {
     display: flex;
     width: 200%;
     transition: transform .35s ease;
+    height: 100%;
   }
   .chart-slide {
     width: 50%;
     flex-shrink: 0;
+    min-height: 260px;
   }
   .chart-slide .card-title {
     margin-bottom: .85rem;
+  }
+  .chart-slider-card {
+    min-height: 320px;
+    display: flex;
+    flex-direction: column;
   }
   .dashboard-chart {
     width: 100%;
@@ -540,7 +548,7 @@
             <div class="card-title">Multas por mês</div>
             <canvas id="chart-mensal" class="dashboard-chart" height="180"></canvas>
           </div>
-          <div class="card">
+          <div class="card chart-slider-card">
             <div class="chart-slider-controls">
               <button class="slider-btn" onclick="toggleDashboardChartSlide()" aria-label="Alternar gráfico">↔</button>
             </div>
