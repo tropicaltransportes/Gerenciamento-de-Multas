@@ -401,6 +401,18 @@
     height: 220px;
     display: block;
   }
+  .chart-mensal-card {
+    min-height: 320px;
+    height: 320px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .chart-mensal-card .dashboard-chart {
+    flex: 1;
+    height: auto;
+    min-height: 0;
+  }
   .chart-slider-controls {
     display: flex;
     justify-content: flex-end;
@@ -548,7 +560,7 @@
         </div>
 
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:1.25rem;margin-bottom:1.25rem">
-          <div class="card">
+          <div class="card chart-mensal-card">
             <div class="card-title">Multas por mês</div>
             <canvas id="chart-mensal" class="dashboard-chart" height="180"></canvas>
           </div>
