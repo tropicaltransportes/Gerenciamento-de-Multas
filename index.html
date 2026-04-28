@@ -860,6 +860,7 @@ function verDetalhe(id) {
   showPage('detalhe');
   document.getElementById('detalhe-titulo').textContent = `${m.veiculos?.placa || '—'} · ${m.orgao_autuador}`;
   const v20 = (parseFloat(m.valor) * 0.8).toLocaleString('pt-BR',{minimumFractionDigits:2});
+  const v40 = (parseFloat(m.valor) * 0.6).toLocaleString('pt-BR',{minimumFractionDigits:2});
   document.getElementById('detalhe-content').innerHTML = `
     <div style="display:flex;gap:10px;margin-bottom:1.5rem;flex-wrap:wrap">
       ${statusBadge(m.status)}
@@ -876,6 +877,7 @@ function verDetalhe(id) {
           <div class="detail-field"><label>Data da infração</label><span>${fmt(m.data_infracao)}</span></div>
           <div class="detail-field"><label>Valor original</label><span style="font-family:var(--mono)">R$ ${parseFloat(m.valor).toLocaleString('pt-BR',{minimumFractionDigits:2})}</span></div>
           <div class="detail-field"><label>Valor c/ 20% desconto</label><span style="font-family:var(--mono)" class="success">R$ ${v20}</span></div>
+          <div class="detail-field"><label>Valor c/ 40% desconto</label><span style="font-family:var(--mono)" class="success">R$ ${v40}</span></div>
         </div>
       </div>
 
@@ -1001,6 +1003,7 @@ function editarMulta() {
           <label>Vencimento do boleto</label>
           <input type="date" id="e-dt-vencimento" value="${m.data_vencimento_boleto||''}" style="width:100%">
         </div>
+        ${m.status === 'confirmado' ? `
         <div class="form-field">
           <label>Valor pago (R$)</label>
           <input type="number" id="e-valor-pago" value="${m.valor_pago||''}" step="0.01" min="0" style="width:100%">
@@ -1008,7 +1011,10 @@ function editarMulta() {
         <div class="form-field">
           <label>Data do pagamento</label>
           <input type="date" id="e-dt-pagamento" value="${m.data_pagamento||''}" style="width:100%">
-        </div>
+        </div>` : `
+        <input type="hidden" id="e-valor-pago" value="${m.valor_pago||''}">
+        <input type="hidden" id="e-dt-pagamento" value="${m.data_pagamento||''}">
+        `}
       </div>
     </div>
 
