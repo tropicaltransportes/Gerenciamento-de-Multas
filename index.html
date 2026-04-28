@@ -1559,13 +1559,8 @@ async function confirmarImport(btn, filename) {
 
   const res = await api('POST', 'multas', payload);
   if (res) {
-    card.style.opacity = '.4';
-    card.style.pointerEvents = 'none';
-    const badge = document.createElement('div');
-    badge.style.cssText = 'text-align:center;padding:.5rem;font-size:13px;color:var(--success)';
-    badge.textContent = '✓ Salvo com sucesso';
-    card.appendChild(badge);
     showToast(`${filename} importado`, 'success');
+    card.remove();
     await loadAll();
   } else {
     btn.textContent = 'Confirmar e salvar'; btn.disabled = false;
