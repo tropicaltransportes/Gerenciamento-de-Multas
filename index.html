@@ -783,7 +783,6 @@ let chartMensal = null;
 let chartVeiculos = null;
 let chartCondutores = null;
 let dashboardSlideIndex = 0;
-let dashboardSlideTimer = null;
 let allMultas = [];
 let allVeiculos = [];
 let currentDetalheId = null;
@@ -1106,10 +1105,6 @@ function toggleDashboardChartSlide() {
 
 function initDashboardChartSlider() {
   setDashboardChartSlide(dashboardSlideIndex);
-  if (dashboardSlideTimer) clearInterval(dashboardSlideTimer);
-  dashboardSlideTimer = setInterval(() => {
-    toggleDashboardChartSlide();
-  }, 5000);
 }
 
 // ---- Multas list ----
