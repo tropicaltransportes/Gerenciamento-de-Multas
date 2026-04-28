@@ -1367,6 +1367,7 @@ function extractTextFromPDF(file) {
 }
 
 function parseBoletText(text, filename) {
+  // Helper: find first match across multiple patterns
   const get = (patterns) => {
     for (const p of patterns) {
       const m = text.match(p);
@@ -1375,58 +1376,92 @@ function parseBoletText(text, filename) {
     return null;
   };
 
-  // Placa
-  const placa = get([/Placa[:\s]+([A-Z]{2,3}[\s-]?[0-9][A-Z0-9][0-9]{2})/i,
-                     /Placa[\s\/A-Z]*([A-Z]{2,3}[\s-]?[0-9][A-Z0-9][0-9]{2})/i])
-    ?.replace(/[^A-Z0-9]/g,'') || null;
+  const isAMPLA = /AMMPLA/i.test(text);
 
-  // Órgão autuador
+  // --- PLACA ---
+  // SENATRAN: "Placa:  SOX7A11" ou "Placa: SOX7A11"
+  // AMMPLA:   "Placa UF ... PEI7B21 PE"
+  const placa = get([
+    /Placa:\s+([A-Z]{2,3}\s*[0-9][A-Z0-9][0-9]{2})/i,
+    /\bPlaca\b\s+([A-Z]{2,3}[0-9][A-Z0-9][0-9]{2})\s+[A-Z]{2}\b/i,
+  ])?.replace(/[^A-Z0-9]/g, '') || null;
+
+  // --- ÓRGÃO AUTUADOR ---
+  // SENATRAN: "Órgão Competente: DEPARTAMENTO NACIONAL..."
+  // AMMPLA:   "Órgão Autuador AMMPLA"
   let orgao = null;
-  if (/AMMPLA/i.test(text)) orgao = 'AMMPLA';
-  else {
-    orgao = get([/Órgão Competente[:\s]+(.+?)(?:\s{2,}|Código|Auto|RENAINF)/i,
-                 /Órgão Autuador[:\s]+(.+?)(?:\s{2,}|Código)/i]);
-    if (orgao) {
-      orgao = orgao
+  if (isAMPLA) {
+    orgao = 'AMMPLA';
+  } else {
+    const rawOrgao = get([/Órgão Competente:\s+(.+)/i, /Órgão Autuador:\s+(.+)/i]);
+    if (rawOrgao) {
+      orgao = rawOrgao
+        .replace(/DEPARTAMENTO NACIONAL DE INFRA-ESTRUTURA DE TRANSP\s*\(DF\)/i, 'DNIT-DF')
+        .replace(/DEPARTAMENTO NACIONAL DE INFRA-ESTRUTURA DE TRANSP\s*\(BA\)/i, 'DNIT-BA')
         .replace(/DEPARTAMENTO NACIONAL DE INFRA-ESTRUTURA DE TRANSP.*/i, 'DNIT')
-        .replace(/PREF\.\s*DE\s*PE\s*PETROLINA.*/i, 'PREF. PETROLINA')
+        .replace(/PREF\.\s*DE\s*PE\s*PETROLINA\s*\(PE\)/i, 'PREF. PETROLINA')
         .replace(/PREFEITURA MUNICIPAL DE PETROLINA.*/i, 'PREF. PETROLINA')
+        .replace(/DER\s*-\s*PE\s*\(PE\)/i, 'DER-PE')
         .replace(/DER\s*-\s*PE.*/i, 'DER-PE')
         .replace(/\s*\(.*?\)\s*$/, '')
-        .trim().substring(0, 40);
+        .trim().substring(0, 50);
     }
   }
 
-  // Auto de infração
-  const auto = get([/Auto de Infra[çc][ãa]o[:\s]+([A-Z0-9]+)/i,
-                    /N[ºo°]\s*do Auto de Infra[çc][ãa]o[:\s]+([A-Z0-9]+)/i]);
+  // --- AUTO DE INFRAÇÃO ---
+  // SENATRAN: "Auto de Infração: N002833824 Valor: R$ 260,32"
+  // AMMPLA:   "Nº do Auto de Infração MB00117304"
+  const auto = get([
+    /Auto de Infra[çc][ãa]o:\s+([A-Z0-9]+)/i,
+    /N[ºo°]\s*do Auto de Infra[çc][ãa]o\s+([A-Z0-9]+)/i,
+    /Auto de Infra[çc][ãa]o\s+([A-Z0-9]+)/i,
+  ]);
 
-  // Valor original — busca "Valor: R$" mas NÃO "Valor a pagar"
-  const valorMatch = text.match(/(?<!pagar[:\s]{0,5})(?<!\bpagar\b.{0,10})\bValor[:\s]+R\$\s*([\d.,]+)/i)
-    || text.match(/\bValor\s*\(R\$\)[:\s]*([\d.,]+)/i)
-    || text.match(/VALOR REAL\s*\(R\$\)[^R]*R\$\s*([\d.,]+)/i);
-  const valor = valorMatch ? parseFloat(valorMatch[1].replace(/\./g,'').replace(',','.')) : null;
+  // --- VALOR ORIGINAL ---
+  // SENATRAN: na linha do auto "Auto de Infração: N002833824 Valor: R$ 260,32"
+  // AMMPLA:   "Valor (R$) 130,16"  ou  "VALOR REAL (R$) R$ 130,16"
+  const valorMatch =
+    text.match(/Auto de Infra[çc][ãa]o:?\s+[A-Z0-9]+\s+Valor:\s+R\$\s*([\d.,]+)/i) ||
+    text.match(/\bValor\s*\(R\$\)\s*([\d.,]+)/i) ||
+    text.match(/VALOR REAL\s*\(R\$\)[^R\d]*R\$\s*([\d.,]+)/i) ||
+    text.match(/\bValor:\s+R\$\s*([\d.,]+)/i);
+  const valor = valorMatch
+    ? parseFloat(valorMatch[1].replace(/\./g, '').replace(',', '.'))
+    : null;
 
-  // Valor com desconto
-  const vDescStr = get([/Valor a pagar[:\s]+R\$\s*([\d.,]+)/i,
-                        /VALOR A PAGAR[^R\d]*([\d.,]+)/i]);
-  const valor_com_desconto = vDescStr ? parseFloat(vDescStr.replace(/\./g,'').replace(',','.')) : null;
+  // --- VALOR COM DESCONTO (valor a pagar) ---
+  // SENATRAN: "Valor a pagar: R$ 156,19"
+  // AMMPLA:   "VALOR A PAGAR COM JUROS (R$) R$ 131,46"
+  const vDescStr = get([
+    /Valor a pagar:\s+R\$\s*([\d.,]+)/i,
+    /VALOR A PAGAR[^R\d]*([\d.,]+)/i,
+  ]);
+  const valor_com_desconto = vDescStr
+    ? parseFloat(vDescStr.replace(/\./g, '').replace(',', '.'))
+    : null;
 
-  // Data de vencimento
-  const vencStr = get([/Data de Vencimento[:\s]+([\d]{2}\/[\d]{2}\/[\d]{4})/i,
-                       /VENCIMENTO[:\s]+([\d]{2}\/[\d]{2}\/[\d]{4})/i,
-                       /DATA DO VENCIMENTO[^\d]*([\d]{2}\/[\d]{2}\/[\d]{4})/i]);
+  // --- DATA DE VENCIMENTO ---
+  // SENATRAN: "Data de Vencimento: 17/04/2026"
+  // AMMPLA:   "DATA DO VENCIMENTO 30/04/2026" ou "VENCIMENTO: 30/04/2026"
+  const vencStr = get([
+    /Data de Vencimento:\s+([\d]{2}\/[\d]{2}\/[\d]{4})/i,
+    /DATA DO VENCIMENTO\s+([\d]{2}\/[\d]{2}\/[\d]{4})/i,
+    /VENCIMENTO:\s+([\d]{2}\/[\d]{2}\/[\d]{4})/i,
+  ]);
   const data_vencimento_boleto = vencStr ? vencStr.split('/').reverse().join('-') : null;
 
-  // Data da infração
-  // 1. AMMPLA: campo "Data DD/MM/YYYY Hora"
+  // --- DATA DA INFRAÇÃO ---
+  // AMMPLA: "Data 27/10/2025 Hora"
+  // SENATRAN: não tem — usa nome do arquivo MULTA_PLACA_DD_MM_YYYY
   let data_infracao = null;
-  const dataInfStr = get([/Data\s+([\d]{2}\/[\d]{2}\/[\d]{4})\s+Hora/i,
-                          /cometimento da infra[çc][ãa]o[\s\S]{0,60}?([\d]{2}\/[\d]{2}\/[\d]{4})/i]);
+  const dataInfStr = get([
+    /Data\s+([\d]{2}\/[\d]{2}\/[\d]{4})\s+Hora/i,
+    /cometimento da infra[çc][ãa]o[\s\S]{0,80}?([\d]{2}\/[\d]{2}\/[\d]{4})/i,
+  ]);
   if (dataInfStr) {
     data_infracao = dataInfStr.split('/').reverse().join('-');
   }
-  // 2. Fallback: extrair do nome do arquivo MULTA_PLACA_DD_MM_YYYY ou MULTA_PLACA_DD.MM.YYYY
+  // Fallback: nome do arquivo MULTA_SOX7A11_05_01_2026.pdf
   if (!data_infracao && filename) {
     const fnMatch = filename.match(/(\d{2})[_.](\d{2})[_.](\d{4})/);
     if (fnMatch) {
@@ -1434,16 +1469,18 @@ function parseBoletText(text, filename) {
     }
   }
 
-  // Código de barras
-  const barrasMatch = text.match(/Código de Barras\s+([\d\s.\-]+)/i);
+  // --- CÓDIGO DE BARRAS ---
+  // SENATRAN BB: "Código de Barras 00190.00009 03043.044902..."
+  // SENATRAN CEF/outros: "Código de Barras 87630000000-0 78103271150-4..."
+  // AMMPLA: linha com 4 grupos "87670000001-4 31463271300-9 42600000005-6 94942000007-5"
   let codigo_barras = null;
+  const barrasMatch = text.match(/Código de Barras\s+([\d\s.\-]+)/i);
   if (barrasMatch) {
     codigo_barras = barrasMatch[1].replace(/[^0-9]/g, '');
   }
-  // AMMPLA: quatro grupos com hífen ex: 87670000001-4 31463271300-9 ...
   if (!codigo_barras) {
     const ampla = text.match(/(\d{5,}-\d[\s]+){3}\d{5,}-\d/);
-    if (ampla) codigo_barras = ampla[0].replace(/[^0-9]/g,'');
+    if (ampla) codigo_barras = ampla[0].replace(/[^0-9]/g, '');
   }
 
   return { placa, orgao_autuador: orgao, auto_infracao: auto, data_infracao,
