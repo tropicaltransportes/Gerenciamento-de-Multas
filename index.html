@@ -1376,15 +1376,23 @@ function parseBoletText(text, filename) {
     return null;
   };
 
+  const getPlacaFromFilename = (name) => {
+    if (!name) return null;
+    const clean = name.toUpperCase().replace(/[^A-Z0-9]/g, '');
+    const m = clean.match(/([A-Z]{3}[0-9][A-Z0-9][0-9]{2})/);
+    return m ? m[1] : null;
+  };
+
   const isAMPLA = /AMMPLA/i.test(text);
 
   // --- PLACA ---
-  // SENATRAN: "Placa:  SOX7A11" ou "Placa: SOX7A11"
-  // AMMPLA:   "Placa UF ... PEI7B21 PE"
-  const placa = get([
+  // Prioridade para o nome do arquivo (padrão operacional da importação)
+  const placaNoArquivo = getPlacaFromFilename(filename);
+  const placaNoTexto = get([
     /Placa:\s+([A-Z]{2,3}\s*[0-9][A-Z0-9][0-9]{2})/i,
     /\bPlaca\b\s+([A-Z]{2,3}[0-9][A-Z0-9][0-9]{2})\s+[A-Z]{2}\b/i,
   ])?.replace(/[^A-Z0-9]/g, '') || null;
+  const placa = placaNoArquivo || placaNoTexto;
 
   // --- ÓRGÃO AUTUADOR ---
   // SENATRAN: "Órgão Competente: DEPARTAMENTO NACIONAL..."
@@ -1412,9 +1420,10 @@ function parseBoletText(text, filename) {
   // SENATRAN: "Auto de Infração: N002833824 Valor: R$ 260,32"
   // AMMPLA:   "Nº do Auto de Infração MB00117304"
   const auto = get([
-    /Auto de Infra[çc][ãa]o:\s+([A-Z0-9]+)/i,
-    /N[ºo°]\s*do Auto de Infra[çc][ãa]o\s+([A-Z0-9]+)/i,
-    /Auto de Infra[çc][ãa]o\s+([A-Z0-9]+)/i,
+    /Auto de Infra[çc][ãa]o:\s*([A-Z]{1,4}\d{5,})\b/i,
+    /N[ºo°]\s*do Auto de Infra[çc][ãa]o\s*([A-Z]{1,4}\d{5,})\b/i,
+    /\bAuto\s+de\s+Infra[çc][ãa]o\b[^A-Z0-9]{0,20}([A-Z]{1,4}\d{5,})\b/i,
+    /\b([A-Z]{1,4}\d{5,})\b(?=[^\n]{0,60}Auto\s+de\s+Infra[çc][ãa]o)/i,
   ]);
 
   // --- VALOR ORIGINAL ---
@@ -1469,22 +1478,8 @@ function parseBoletText(text, filename) {
     }
   }
 
-  // --- CÓDIGO DE BARRAS ---
-  // SENATRAN BB: "Código de Barras 00190.00009 03043.044902..."
-  // SENATRAN CEF/outros: "Código de Barras 87630000000-0 78103271150-4..."
-  // AMMPLA: linha com 4 grupos "87670000001-4 31463271300-9 42600000005-6 94942000007-5"
-  let codigo_barras = null;
-  const barrasMatch = text.match(/Código de Barras\s+([\d\s.\-]+)/i);
-  if (barrasMatch) {
-    codigo_barras = barrasMatch[1].replace(/[^0-9]/g, '');
-  }
-  if (!codigo_barras) {
-    const ampla = text.match(/(\d{5,}-\d[\s]+){3}\d{5,}-\d/);
-    if (ampla) codigo_barras = ampla[0].replace(/[^0-9]/g, '');
-  }
-
   return { placa, orgao_autuador: orgao, auto_infracao: auto, data_infracao,
-           valor, valor_com_desconto, data_vencimento_boleto, codigo_barras };
+           valor, valor_com_desconto, data_vencimento_boleto };
 }
 
 function renderExtracted(card, d, filename) {
@@ -1514,7 +1509,9 @@ function renderExtracted(card, d, filename) {
       </div>
       <div class="form-field">
         <label>Órgão autuador</label>
-        <input type="text" class="f-imp-orgao" value="${d.orgao_autuador || ''}" style="width:100%">
+        <select class="f-imp-orgao" style="width:100%">
+          ${['PRF','DETRAN','AMMPLA','CET','SEMOB','PMRV','ANTT','DNIT','PREF. PETROLINA','DER-PE','Outro'].map(org => `<option value="${org}" ${org === (d.orgao_autuador || '') ? 'selected' : ''}>${org}</option>`).join('')}
+        </select>
       </div>
       <div class="form-field">
         <label>Data da infração</label>
@@ -1532,10 +1529,6 @@ function renderExtracted(card, d, filename) {
         <label>Auto de infração</label>
         <input type="text" class="f-imp-auto" value="${d.auto_infracao || ''}" style="width:100%">
       </div>
-      <div class="form-field full" style="grid-column:1/-1">
-        <label>Código de barras</label>
-        <input type="text" class="f-imp-barras" value="${d.codigo_barras || ''}" style="width:100%;font-family:var(--mono);font-size:12px">
-      </div>
     </div>`;
 }
 
@@ -1547,8 +1540,6 @@ async function confirmarImport(btn, filename) {
   const valor = card.querySelector('.f-imp-valor').value;
   const data_vencimento_boleto = card.querySelector('.f-imp-vencimento').value || null;
   const auto = card.querySelector('.f-imp-auto').value.trim();
-  const barras = card.querySelector('.f-imp-barras').value.trim();
-
   if (!veiculo_id || !data_infracao || !valor) {
     showToast('Preencha veículo, data e valor', 'danger'); return;
   }
@@ -1562,7 +1553,6 @@ async function confirmarImport(btn, filename) {
     valor: parseFloat(valor),
     status: 'encaminhado',
     boleto_disponivel: true,
-    codigo_barras: barras || null,
     data_vencimento_boleto,
     updated_at: new Date().toISOString()
   };
