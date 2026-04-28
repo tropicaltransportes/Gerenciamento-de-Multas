@@ -8,25 +8,25 @@
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
   :root {
-    --bg: #0f0f0f;
-    --bg2: #181818;
-    --bg3: #222222;
-    --bg4: #2a2a2a;
-    --border: rgba(255,255,255,0.08);
-    --border2: rgba(255,255,255,0.14);
-    --text: #f0ede8;
-    --text2: #8a8680;
-    --text3: #5a5754;
-    --accent: #e8d5a3;
-    --accent2: #c4a96a;
-    --danger: #e05c5c;
-    --danger-bg: rgba(224,92,92,0.1);
-    --warning: #d4914a;
-    --warning-bg: rgba(212,145,74,0.1);
-    --success: #5aac82;
-    --success-bg: rgba(90,172,130,0.1);
-    --info: #6a9fd4;
-    --info-bg: rgba(106,159,212,0.1);
+    --bg: #c8ddd7;
+    --bg2: #bcc88f;
+    --bg3: #d8e5df;
+    --bg4: #afbc81;
+    --border: rgba(31,49,72,0.15);
+    --border2: rgba(31,49,72,0.35);
+    --text: #1f3148;
+    --text2: #5d6770;
+    --text3: #49545f;
+    --accent: #0a752d;
+    --accent2: #00c63b;
+    --danger: #1f3148;
+    --danger-bg: rgba(31,49,72,0.12);
+    --warning: #5d6770;
+    --warning-bg: rgba(93,103,112,0.16);
+    --success: #0a752d;
+    --success-bg: rgba(10,117,45,0.16);
+    --info: #00c63b;
+    --info-bg: rgba(0,198,59,0.14);
     --radius: 10px;
     --radius-sm: 6px;
     --font: 'DM Sans', sans-serif;
@@ -96,7 +96,7 @@
     margin-bottom: 2px;
   }
   .nav-item:hover { background: var(--bg3); color: var(--text); }
-  .nav-item.active { background: rgba(232,213,163,0.1); color: var(--accent); }
+  .nav-item.active { background: rgba(10,117,45,0.15); color: var(--accent); }
   .nav-icon {
     width: 16px;
     height: 16px;
@@ -140,11 +140,11 @@
   .btn:hover { background: var(--bg4); color: var(--text); border-color: var(--border2); }
   .btn-accent {
     background: var(--accent);
-    color: #1a1500;
+    color: #f3f8f5;
     border-color: var(--accent);
     font-weight: 500;
   }
-  .btn-accent:hover { background: var(--accent2); border-color: var(--accent2); color: #111; }
+  .btn-accent:hover { background: var(--accent2); border-color: var(--accent2); color: #103020; }
   .btn-danger { border-color: var(--danger); color: var(--danger); }
   .btn-danger:hover { background: var(--danger-bg); }
   .btn-sm { padding: 5px 11px; font-size: 12px; }
@@ -271,9 +271,9 @@
     font-size: 13px;
     gap: 12px;
   }
-  .alert-item.danger { background: var(--danger-bg); border-color: rgba(224,92,92,.2); color: #e8a0a0; }
-  .alert-item.warning { background: var(--warning-bg); border-color: rgba(212,145,74,.2); color: #e8c090; }
-  .alert-item.info { background: var(--info-bg); border-color: rgba(106,159,212,.2); color: #a0bce8; }
+  .alert-item.danger { background: var(--danger-bg); border-color: rgba(31,49,72,.28); color: #1f3148; }
+  .alert-item.warning { background: var(--warning-bg); border-color: rgba(93,103,112,.3); color: #3e474f; }
+  .alert-item.info { background: var(--info-bg); border-color: rgba(0,198,59,.28); color: #055e23; }
   .alert-item strong { color: var(--text); }
 
   /* Vehicle cards */
@@ -443,17 +443,17 @@
   }
   .config-info {
     background: var(--info-bg);
-    border: 1px solid rgba(106,159,212,.2);
+    border: 1px solid rgba(0,198,59,.28);
     border-radius: var(--radius-sm);
     padding: 1rem 1.25rem;
     font-size: 13px;
-    color: #a0bce8;
+    color: #055e23;
     line-height: 1.7;
     margin-bottom: 1.5rem;
   }
   .config-info code {
     font-family: var(--mono);
-    background: rgba(106,159,212,.1);
+    background: rgba(0,198,59,.14);
     padding: 1px 6px;
     border-radius: 4px;
     font-size: 12px;
@@ -475,7 +475,7 @@
     font-family: var(--mono);
     font-size: 11px;
     color: var(--accent2);
-    background: rgba(232,213,163,.1);
+    background: rgba(10,117,45,.15);
     border-radius: 50%;
     width: 22px;
     height: 22px;
