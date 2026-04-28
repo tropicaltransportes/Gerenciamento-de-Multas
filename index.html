@@ -465,7 +465,7 @@
         </button>
       </div>
       <div class="content">
-        <div id="kpi-grid" class="kpi-grid">
+        <div id="kpi-grid" class="kpi-grid" style="margin-bottom:1.5rem">
           <div class="kpi"><div class="kpi-label">Total de multas</div><div class="kpi-value" id="kpi-total"><span class="loader"></span></div></div>
           <div class="kpi"><div class="kpi-label">Valor em aberto</div><div class="kpi-value warning" id="kpi-valor"><span class="loader"></span></div></div>
           <div class="kpi"><div class="kpi-label">Vencendo em 7 dias</div><div class="kpi-value danger" id="kpi-venc7"><span class="loader"></span></div></div>
@@ -474,18 +474,33 @@
           <div class="kpi"><div class="kpi-label">Pagas</div><div class="kpi-value success" id="kpi-pagas"><span class="loader"></span></div></div>
         </div>
 
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:1.25rem">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:1.25rem;margin-bottom:1.25rem">
           <div class="card">
             <div class="card-title">Alertas urgentes</div>
-            <div id="alert-list" class="alert-list">
-              <div class="empty-state">Carregando...</div>
-            </div>
+            <div id="alert-list" class="alert-list"><div class="empty-state">Carregando...</div></div>
           </div>
           <div class="card">
-            <div class="card-title">Por veículo</div>
-            <div id="dash-veiculos"></div>
+            <div class="card-title">Vencimentos — próximos 30 dias</div>
+            <div id="dash-vencimentos"></div>
           </div>
         </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:1.25rem;margin-bottom:1.25rem">
+          <div class="card">
+            <div class="card-title">Multas por mês</div>
+            <canvas id="chart-mensal" height="180"></canvas>
+          </div>
+          <div class="card">
+            <div class="card-title">Valor em aberto por veículo</div>
+            <canvas id="chart-veiculos" height="180"></canvas>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">Ranking — veículos com mais multas</div>
+          <div id="dash-ranking"></div>
+        </div>
+
       </div>
     </div>
 
@@ -641,8 +656,11 @@
 
 <div class="toast" id="toast"></div>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script>
 const SUPABASE_URL = 'https://ceovbsajcstzpunjaabj.supabase.co';
+let chartMensal = null;
+let chartVeiculos = null;
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNlb3Zic2FqY3N0enB1bmphYWJqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzczNTg1NTEsImV4cCI6MjA5MjkzNDU1MX0.zyCPJ8TvAFVIB59roBOdHf74RXxqkRGSAWJCWrhEwmE';
 let allMultas = [];
 let allVeiculos = [];
@@ -711,6 +729,7 @@ function renderAll() {
 function renderDashboard() {
   const today = new Date(); today.setHours(0,0,0,0);
   const in7 = new Date(today); in7.setDate(in7.getDate() + 7);
+  const in30 = new Date(today); in30.setDate(in30.getDate() + 30);
 
   const pendentes = allMultas.filter(m => m.status !== 'confirmado');
   const valorAberto = pendentes.reduce((s, m) => s + parseFloat(m.valor || 0), 0);
@@ -730,7 +749,7 @@ function renderDashboard() {
   document.getElementById('kpi-condutor').textContent = condutorPendente.length;
   document.getElementById('kpi-pagas').textContent = pagas.length;
 
-  // Alerts
+  // Alertas
   const alerts = [];
   venc7.forEach(m => {
     const d = new Date(m.data_vencimento_boleto + 'T00:00:00');
@@ -747,7 +766,6 @@ function renderDashboard() {
     const dias = Math.ceil((d - today) / 86400000);
     if (dias <= 15) alerts.push({ tipo: 'warning', text: `${m.veiculos?.placa || '—'} · condutor não indicado · prazo em <strong>${dias} dia${dias !== 1 ? 's' : ''}</strong>`, badge: 'condutor' });
   });
-
   const alertList = document.getElementById('alert-list');
   if (alerts.length === 0) {
     alertList.innerHTML = '<div class="empty-state" style="text-align:left;padding:1rem 0;color:var(--success)">Nenhum alerta no momento</div>';
@@ -759,28 +777,143 @@ function renderDashboard() {
       </div>`).join('');
   }
 
-  // Por veículo
-  const byVeiculo = {};
-  allMultas.forEach(m => {
-    const vid = m.veiculo_id;
-    if (!byVeiculo[vid]) byVeiculo[vid] = { placa: m.veiculos?.placa, numero: m.veiculos?.numero, pendente: 0, confirmado: 0, encaminhado: 0 };
-    if (m.status === 'confirmado') byVeiculo[vid].confirmado++;
-    else if (m.status === 'encaminhado') byVeiculo[vid].encaminhado++;
-    else byVeiculo[vid].pendente++;
-  });
+  // Vencimentos próximos 30 dias
+  const venc30 = allMultas.filter(m => {
+    if (!m.data_vencimento_boleto || m.status === 'confirmado') return false;
+    const d = new Date(m.data_vencimento_boleto + 'T00:00:00');
+    return d >= today && d <= in30;
+  }).sort((a, b) => new Date(a.data_vencimento_boleto) - new Date(b.data_vencimento_boleto));
+  const vencDiv = document.getElementById('dash-vencimentos');
+  if (venc30.length === 0) {
+    vencDiv.innerHTML = '<div style="padding:.75rem 0;font-size:13px;color:var(--text3)">Nenhum vencimento nos próximos 30 dias</div>';
+  } else {
+    vencDiv.innerHTML = venc30.map(m => {
+      const d = new Date(m.data_vencimento_boleto + 'T00:00:00');
+      const dias = Math.ceil((d - today) / 86400000);
+      const cls = dias <= 3 ? 'danger' : dias <= 7 ? 'warning' : 'text2';
+      return `<div onclick="verDetalhe('${m.id}')" style="display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid var(--border);cursor:pointer">
+        <div>
+          <span style="font-family:var(--mono);font-size:13px;color:var(--accent)">${m.veiculos?.placa || '—'}</span>
+          <span style="font-size:11px;color:var(--text3);margin-left:8px">${m.orgao_autuador}</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px">
+          <span style="font-size:12px;font-family:var(--mono)">R$ ${parseFloat(m.valor).toLocaleString('pt-BR',{minimumFractionDigits:2})}</span>
+          <span style="font-size:11px;color:var(--${cls});font-weight:500">${dias === 0 ? 'hoje' : dias + 'd'}</span>
+        </div>
+      </div>`;
+    }).join('');
+  }
 
-  document.getElementById('dash-veiculos').innerHTML = Object.values(byVeiculo).map(v => `
-    <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border)">
-      <div>
-        <div style="font-family:var(--mono);font-size:13px;color:var(--accent)">${v.placa || '—'}</div>
-        <div style="font-size:11px;color:var(--text3)">${v.numero || ''}</div>
+  // Gráfico: multas por mês (últimos 8 meses)
+  const mesesLabels = [];
+  const mesesData = [];
+  for (let i = 7; i >= 0; i--) {
+    const d = new Date(today.getFullYear(), today.getMonth() - i, 1);
+    const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+    mesesLabels.push(d.toLocaleString('pt-BR', {month:'short', year:'2-digit'}));
+    mesesData.push(allMultas.filter(m => m.data_infracao && m.data_infracao.startsWith(key)).length);
+  }
+  const ctxM = document.getElementById('chart-mensal');
+  if (ctxM) {
+    if (chartMensal) chartMensal.destroy();
+    chartMensal = new Chart(ctxM, {
+      type: 'line',
+      data: {
+        labels: mesesLabels,
+        datasets: [{
+          label: 'Multas',
+          data: mesesData,
+          borderColor: '#e8d5a3',
+          backgroundColor: 'rgba(232,213,163,0.08)',
+          borderWidth: 2,
+          pointBackgroundColor: '#e8d5a3',
+          pointRadius: 4,
+          fill: true,
+          tension: 0.3
+        }]
+      },
+      options: {
+        responsive: true,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { ticks: { color: '#5a5754', font: { size: 11 } }, grid: { color: 'rgba(255,255,255,0.04)' } },
+          y: { ticks: { color: '#5a5754', font: { size: 11 }, stepSize: 1 }, grid: { color: 'rgba(255,255,255,0.04)' }, beginAtZero: true }
+        }
+      }
+    });
+  }
+
+  // Gráfico: valor em aberto por veículo (top 10)
+  const byVeiculoValor = {};
+  allMultas.filter(m => m.status !== 'confirmado').forEach(m => {
+    const placa = m.veiculos?.placa || '?';
+    byVeiculoValor[placa] = (byVeiculoValor[placa] || 0) + parseFloat(m.valor || 0);
+  });
+  const topVeiculos = Object.entries(byVeiculoValor).sort((a,b) => b[1]-a[1]).slice(0,10);
+  const ctxV = document.getElementById('chart-veiculos');
+  if (ctxV) {
+    if (chartVeiculos) chartVeiculos.destroy();
+    chartVeiculos = new Chart(ctxV, {
+      type: 'bar',
+      data: {
+        labels: topVeiculos.map(x => x[0]),
+        datasets: [{
+          label: 'Valor (R$)',
+          data: topVeiculos.map(x => Math.round(x[1] * 100) / 100),
+          backgroundColor: 'rgba(212,145,74,0.6)',
+          borderColor: '#d4914a',
+          borderWidth: 1,
+          borderRadius: 4
+        }]
+      },
+      options: {
+        responsive: true,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { ticks: { color: '#5a5754', font: { size: 10 } }, grid: { display: false } },
+          y: { ticks: { color: '#5a5754', font: { size: 11 }, callback: v => 'R$' + v.toLocaleString('pt-BR') }, grid: { color: 'rgba(255,255,255,0.04)' }, beginAtZero: true }
+        }
+      }
+    });
+  }
+
+  // Ranking veículos
+  const rankingMap = {};
+  allMultas.forEach(m => {
+    const placa = m.veiculos?.placa || '?';
+    const num = m.veiculos?.numero || '';
+    const vid = m.veiculo_id;
+    if (!rankingMap[vid]) rankingMap[vid] = { placa, num, total: 0, pendente: 0, confirmado: 0, encaminhado: 0, valor: 0 };
+    rankingMap[vid].total++;
+    rankingMap[vid].valor += parseFloat(m.valor || 0);
+    if (m.status === 'confirmado') rankingMap[vid].confirmado++;
+    else if (m.status === 'encaminhado') rankingMap[vid].encaminhado++;
+    else rankingMap[vid].pendente++;
+  });
+  const ranking = Object.values(rankingMap).sort((a,b) => b.total - a.total).slice(0,10);
+  const maxTotal = ranking[0]?.total || 1;
+  document.getElementById('dash-ranking').innerHTML = ranking.length === 0
+    ? '<div class="empty-state">Nenhum dado</div>'
+    : ranking.map((v, i) => `
+    <div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--border)">
+      <div style="font-family:var(--mono);font-size:11px;color:var(--text3);width:18px;text-align:right">${i+1}</div>
+      <div style="min-width:80px">
+        <div style="font-family:var(--mono);font-size:13px;color:var(--accent)">${v.placa}</div>
+        <div style="font-size:11px;color:var(--text3)">${v.num}</div>
       </div>
-      <div style="display:flex;gap:5px;flex-wrap:wrap;justify-content:flex-end">
-        ${v.pendente > 0 ? `<span class="badge badge-danger">${v.pendente} pendente${v.pendente !== 1 ? 's' : ''}</span>` : ''}
+      <div style="flex:1">
+        <div style="height:6px;background:var(--bg3);border-radius:3px;overflow:hidden">
+          <div style="height:100%;width:${Math.round(v.total/maxTotal*100)}%;background:var(--accent2);border-radius:3px"></div>
+        </div>
+      </div>
+      <div style="display:flex;gap:6px;align-items:center;min-width:180px;justify-content:flex-end">
+        <span style="font-size:11px;color:var(--text3)">${v.total} multa${v.total!==1?'s':''}</span>
+        ${v.pendente > 0 ? `<span class="badge badge-danger">${v.pendente} pend.</span>` : ''}
         ${v.encaminhado > 0 ? `<span class="badge badge-info">${v.encaminhado} enc.</span>` : ''}
-        ${v.confirmado > 0 ? `<span class="badge badge-success">${v.confirmado} paga${v.confirmado !== 1 ? 's' : ''}</span>` : ''}
+        ${v.confirmado > 0 ? `<span class="badge badge-success">${v.confirmado} paga${v.confirmado!==1?'s':''}</span>` : ''}
+        <span style="font-size:11px;font-family:var(--mono);color:var(--text2)">R$ ${Math.round(v.valor).toLocaleString('pt-BR')}</span>
       </div>
-    </div>`).join('') || '<div style="padding:1rem 0;color:var(--text3);font-size:13px">Nenhum dado</div>';
+    </div>`).join('');
 }
 
 // ---- Multas list ----
