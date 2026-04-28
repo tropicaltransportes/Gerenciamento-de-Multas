@@ -775,7 +775,7 @@ function renderDashboard() {
     return d >= today && d <= in7;
   });
   const semBoleto = allMultas.filter(m => !m.boleto_disponivel && m.status !== 'confirmado');
-  const condutorPendente = allMultas.filter(m => !m.condutor_indicado && m.prazo_indicacao_condutor);
+  const condutorPendente = allMultas.filter(m => !m.condutor_indicado);
   const pagas = allMultas.filter(m => m.status === 'confirmado');
 
   document.getElementById('kpi-total').textContent = allMultas.length;
