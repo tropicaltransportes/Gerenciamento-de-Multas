@@ -529,6 +529,11 @@
             <option value="confirmado">Pagamento confirmado</option>
             <option value="vencida">Vencida</option>
           </select>
+          <select id="f-prazo" onchange="renderMultasList()">
+            <option value="">Todos os prazos</option>
+            <option value="30">Vencendo em 30 dias</option>
+            <option value="7">Vencendo em 7 dias</option>
+          </select>
         </div>
         <div class="card" style="padding:0;overflow:hidden">
           <div class="table-wrap">
@@ -695,6 +700,7 @@ let chartVeiculos = null;
 let allMultas = [];
 let allVeiculos = [];
 let currentDetalheId = null;
+const DASH_VENCIMENTOS_LIMIT = 6;
 
 // ---- API ----
 async function api(method, table, body = null) {
@@ -817,7 +823,8 @@ function renderDashboard() {
   if (venc30.length === 0) {
     vencDiv.innerHTML = '<div style="padding:.75rem 0;font-size:13px;color:var(--text3)">Nenhum vencimento nos próximos 30 dias</div>';
   } else {
-    vencDiv.innerHTML = venc30.map(m => {
+    const visibleVenc = venc30.slice(0, DASH_VENCIMENTOS_LIMIT);
+    const htmlItems = visibleVenc.map(m => {
       const d = new Date(m.data_vencimento_boleto + 'T00:00:00');
       const dias = Math.ceil((d - today) / 86400000);
       const cls = dias <= 3 ? 'danger' : dias <= 7 ? 'warning' : 'text2';
@@ -832,6 +839,10 @@ function renderDashboard() {
         </div>
       </div>`;
     }).join('');
+    const footerButton = `<div style="padding-top:12px;display:flex;justify-content:flex-end">
+      <button class="btn btn-sm" onclick="abrirMultasProximosDias(30)">Ver detalhes (${venc30.length})</button>
+    </div>`;
+    vencDiv.innerHTML = htmlItems + footerButton;
   }
 
   // Gráfico: multas por mês (últimos 8 meses)
@@ -950,10 +961,20 @@ function renderDashboard() {
 function renderMultasList() {
   const fv = document.getElementById('f-veiculo')?.value || '';
   const fs = document.getElementById('f-status')?.value || '';
+  const fp = document.getElementById('f-prazo')?.value || '';
 
   let filtered = allMultas;
   if (fv) filtered = filtered.filter(m => m.veiculo_id === fv);
   if (fs) filtered = filtered.filter(m => m.status === fs);
+  if (fp) {
+    const today = new Date(); today.setHours(0,0,0,0);
+    const end = new Date(today); end.setDate(end.getDate() + Number(fp));
+    filtered = filtered.filter(m => {
+      if (!m.data_vencimento_boleto || m.status === 'confirmado') return false;
+      const d = new Date(m.data_vencimento_boleto + 'T00:00:00');
+      return d >= today && d <= end;
+    });
+  }
 
   const tbody = document.getElementById('multas-tbody');
   if (!tbody) return;
@@ -1005,6 +1026,17 @@ function filterByVeiculo(id, placa) {
   showPage('multas');
   const sel = document.getElementById('f-veiculo');
   if (sel) { sel.value = id; renderMultasList(); }
+}
+
+function abrirMultasProximosDias(dias = 30) {
+  showPage('multas');
+  const prazoSel = document.getElementById('f-prazo');
+  const veiculoSel = document.getElementById('f-veiculo');
+  const statusSel = document.getElementById('f-status');
+  if (veiculoSel) veiculoSel.value = '';
+  if (statusSel) statusSel.value = '';
+  if (prazoSel) prazoSel.value = String(dias);
+  renderMultasList();
 }
 
 function populateVeiculoSelects() {
