@@ -264,6 +264,17 @@
 
   /* Alert items */
   .alert-list { display: flex; flex-direction: column; gap: 8px; }
+  .alert-toggle {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 10px;
+    flex-wrap: wrap;
+  }
+  .alert-toggle .btn {
+    flex: 1;
+    min-width: 170px;
+    justify-content: center;
+  }
   .alert-item {
     display: flex;
     justify-content: space-between;
@@ -555,6 +566,10 @@
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:1.25rem;margin-bottom:1.25rem">
           <div class="card">
             <div class="card-title">Alertas urgentes</div>
+            <div class="alert-toggle">
+              <button id="btn-alerta-boleto" class="btn btn-sm btn-accent" onclick="setUrgentAlertMode('boleto')">Vencimento de boletos</button>
+              <button id="btn-alerta-condutor" class="btn btn-sm" onclick="setUrgentAlertMode('condutor')">Prazo de condutor infrator</button>
+            </div>
             <div id="alert-list" class="alert-list"><div class="empty-state">Carregando...</div></div>
           </div>
           <div class="card">
@@ -787,6 +802,7 @@ let chartMensal = null;
 let chartVeiculos = null;
 let chartCondutores = null;
 let dashboardSlideIndex = 0;
+let urgentAlertMode = 'boleto';
 let allMultas = [];
 let allVeiculos = [];
 let currentDetalheId = null;
@@ -880,17 +896,19 @@ function renderDashboard() {
   document.getElementById('kpi-pagas').textContent = pagas.length;
 
   // Alertas
-  const alerts = [];
+  const boletoAlerts = [];
   venc7.forEach(m => {
     const d = new Date(m.data_vencimento_boleto + 'T00:00:00');
     const dias = Math.ceil((d - today) / 86400000);
     const placa = m.veiculos?.placa || '—';
     const tipo = dias <= 2 ? 'danger' : 'warning';
-    alerts.push({ tipo, text: `${placa} · vence em <strong>${dias} dia${dias !== 1 ? 's' : ''}</strong> · R$ ${parseFloat(m.valor).toLocaleString('pt-BR',{minimumFractionDigits:2})}`, badge: dias <= 2 ? 'urgente' : 'atenção' });
+    boletoAlerts.push({ tipo, text: `${placa} · vence em <strong>${dias} dia${dias !== 1 ? 's' : ''}</strong> · R$ ${parseFloat(m.valor).toLocaleString('pt-BR',{minimumFractionDigits:2})}`, badge: dias <= 2 ? 'urgente' : 'atenção' });
   });
   semBoleto.forEach(m => {
-    alerts.push({ tipo: 'danger', text: `${m.veiculos?.placa || '—'} · sem boleto disponível · R$ ${parseFloat(m.valor).toLocaleString('pt-BR',{minimumFractionDigits:2})}`, badge: 'sem boleto' });
+    boletoAlerts.push({ tipo: 'danger', text: `${m.veiculos?.placa || '—'} · sem boleto disponível · R$ ${parseFloat(m.valor).toLocaleString('pt-BR',{minimumFractionDigits:2})}`, badge: 'sem boleto' });
   });
+
+  const condutorAlerts = [];
   condutorPendente.forEach(m => {
     if (!m.prazo_indicacao_condutor) return;
     const d = new Date(m.prazo_indicacao_condutor + 'T00:00:00');
@@ -903,23 +921,15 @@ function renderDashboard() {
         : dias === 0
           ? 'vence <strong>hoje</strong>'
           : `prazo em <strong>${dias} dia${dias !== 1 ? 's' : ''}</strong>`;
-      alerts.push({
+      condutorAlerts.push({
         tipo,
         text: `${m.veiculos?.placa || '—'} · condutor não indicado · ${prazoLabel}`,
         badge: dias <= 2 ? 'urgente' : 'condutor'
       });
     }
   });
-  const alertList = document.getElementById('alert-list');
-  if (alerts.length === 0) {
-    alertList.innerHTML = '<div class="empty-state" style="text-align:left;padding:1rem 0;color:var(--success)">Nenhum alerta no momento</div>';
-  } else {
-    alertList.innerHTML = alerts.slice(0,6).map(a => `
-      <div class="alert-item ${a.tipo}">
-        <span>${a.text}</span>
-        <span class="badge badge-${a.tipo}">${a.badge}</span>
-      </div>`).join('');
-  }
+
+  renderUrgentAlerts({ boletoAlerts, condutorAlerts });
 
   // Vencimentos próximos 30 dias
   const venc30 = allMultas.filter(m => {
@@ -1112,6 +1122,37 @@ function renderDashboard() {
         <span style="font-size:11px;font-family:var(--mono);color:var(--text2)">R$ ${Math.round(v.valor).toLocaleString('pt-BR')}</span>
       </div>
     </div>`).join('');
+}
+
+function renderUrgentAlerts({ boletoAlerts = [], condutorAlerts = [] } = {}) {
+  const alertList = document.getElementById('alert-list');
+  const btnBoleto = document.getElementById('btn-alerta-boleto');
+  const btnCondutor = document.getElementById('btn-alerta-condutor');
+
+  if (btnBoleto) btnBoleto.classList.toggle('btn-accent', urgentAlertMode === 'boleto');
+  if (btnCondutor) btnCondutor.classList.toggle('btn-accent', urgentAlertMode === 'condutor');
+
+  const alerts = urgentAlertMode === 'condutor' ? condutorAlerts : boletoAlerts;
+  const emptyLabel = urgentAlertMode === 'condutor'
+    ? 'Nenhum alerta de prazo de condutor no momento'
+    : 'Nenhum alerta de vencimento de boleto no momento';
+
+  if (alerts.length === 0) {
+    alertList.innerHTML = `<div class="empty-state" style="text-align:left;padding:1rem 0;color:var(--success)">${emptyLabel}</div>`;
+    return;
+  }
+
+  alertList.innerHTML = alerts.slice(0, 6).map(a => `
+    <div class="alert-item ${a.tipo}">
+      <span>${a.text}</span>
+      <span class="badge badge-${a.tipo}">${a.badge}</span>
+    </div>`).join('');
+}
+
+function setUrgentAlertMode(mode) {
+  if (mode !== 'boleto' && mode !== 'condutor') return;
+  urgentAlertMode = mode;
+  renderDashboard();
 }
 
 function setDashboardChartSlide(index) {
