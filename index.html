@@ -370,7 +370,8 @@
   .chart-slider {
     position: relative;
     overflow: hidden;
-    flex: 1;
+    flex: 0 0 250px;
+    height: 250px;
   }
   .chart-slider-track {
     display: flex;
@@ -381,15 +382,18 @@
   .chart-slide {
     width: 50%;
     flex-shrink: 0;
-    min-height: 260px;
+    min-height: 250px;
+    height: 250px;
   }
   .chart-slide .card-title {
     margin-bottom: .85rem;
   }
   .chart-slider-card {
     min-height: 320px;
+    height: 320px;
     display: flex;
     flex-direction: column;
+    overflow: hidden;
   }
   .dashboard-chart {
     width: 100%;
