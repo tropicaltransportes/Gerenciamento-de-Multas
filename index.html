@@ -383,6 +383,11 @@
   .chart-slide .card-title {
     margin-bottom: .85rem;
   }
+  .dashboard-chart {
+    width: 100% !important;
+    height: 220px !important;
+    display: block;
+  }
   .chart-slider-controls {
     display: flex;
     justify-content: flex-end;
@@ -532,7 +537,7 @@
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:1.25rem;margin-bottom:1.25rem">
           <div class="card">
             <div class="card-title">Multas por mês</div>
-            <canvas id="chart-mensal" height="180"></canvas>
+            <canvas id="chart-mensal" class="dashboard-chart" height="180"></canvas>
           </div>
           <div class="card">
             <div class="chart-slider-controls">
@@ -542,11 +547,12 @@
               <div class="chart-slider-track" id="chart-slider-track">
                 <div class="chart-slide">
                   <div class="card-title">Valor em aberto por veículo</div>
-                  <canvas id="chart-veiculos" height="180"></canvas>
+                  <canvas id="chart-veiculos" class="dashboard-chart" height="180"></canvas>
                 </div>
                 <div class="chart-slide">
                   <div class="card-title">Infrações por condutor identificado</div>
-                  <canvas id="chart-condutores" height="180"></canvas>
+                  <canvas id="chart-condutores" class="dashboard-chart" height="180"></canvas>
+                  <div id="chart-condutores-empty" class="empty-state" style="display:none;padding:2rem 1rem">Sem condutores identificados ainda.</div>
                 </div>
               </div>
             </div>
@@ -931,6 +937,7 @@ function renderDashboard() {
       },
       options: {
         responsive: true,
+        maintainAspectRatio: false,
         plugins: { legend: { display: false } },
         scales: {
           x: { ticks: { color: '#5a5754', font: { size: 11 } }, grid: { color: 'rgba(255,255,255,0.04)' } },
@@ -965,6 +972,7 @@ function renderDashboard() {
       },
       options: {
         responsive: true,
+        maintainAspectRatio: false,
         plugins: { legend: { display: false } },
         scales: {
           x: { ticks: { color: '#5a5754', font: { size: 10 } }, grid: { display: false } },
@@ -984,30 +992,39 @@ function renderDashboard() {
   });
   const topCondutores = Object.entries(byCondutor).sort((a,b) => b[1]-a[1]).slice(0,10);
   const ctxC = document.getElementById('chart-condutores');
+  const condutoresEmpty = document.getElementById('chart-condutores-empty');
   if (ctxC) {
     if (chartCondutores) chartCondutores.destroy();
-    chartCondutores = new Chart(ctxC, {
-      type: 'bar',
-      data: {
-        labels: topCondutores.map(x => x[0]),
-        datasets: [{
-          label: 'Infrações',
-          data: topCondutores.map(x => x[1]),
-          backgroundColor: 'rgba(106,159,212,0.55)',
-          borderColor: '#6a9fd4',
-          borderWidth: 1,
-          borderRadius: 4
-        }]
-      },
-      options: {
-        responsive: true,
-        plugins: { legend: { display: false } },
-        scales: {
-          x: { ticks: { color: '#5a5754', font: { size: 10 } }, grid: { display: false } },
-          y: { ticks: { color: '#5a5754', font: { size: 11 }, stepSize: 1 }, grid: { color: 'rgba(255,255,255,0.04)' }, beginAtZero: true }
+    if (topCondutores.length === 0) {
+      ctxC.style.display = 'none';
+      if (condutoresEmpty) condutoresEmpty.style.display = 'block';
+    } else {
+      ctxC.style.display = 'block';
+      if (condutoresEmpty) condutoresEmpty.style.display = 'none';
+      chartCondutores = new Chart(ctxC, {
+        type: 'bar',
+        data: {
+          labels: topCondutores.map(x => x[0]),
+          datasets: [{
+            label: 'Infrações',
+            data: topCondutores.map(x => x[1]),
+            backgroundColor: 'rgba(106,159,212,0.55)',
+            borderColor: '#6a9fd4',
+            borderWidth: 1,
+            borderRadius: 4
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { display: false } },
+          scales: {
+            x: { ticks: { color: '#5a5754', font: { size: 10 } }, grid: { display: false } },
+            y: { ticks: { color: '#5a5754', font: { size: 11 }, stepSize: 1 }, grid: { color: 'rgba(255,255,255,0.04)' }, beginAtZero: true }
+          }
         }
-      }
-    });
+      });
+    }
   }
 
   initDashboardChartSlider();
