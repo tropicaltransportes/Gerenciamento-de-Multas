@@ -19,16 +19,16 @@
     --text3: #8ea3b3;
     --accent: #0a752d;
     --accent2: #00c63b;
-    --danger: #7ea0bf;
-    --danger-bg: rgba(126, 160, 191, 0.16);
-    --warning: #b3becc;
-    --warning-bg: rgba(179, 190, 204, 0.16);
+    --danger: #ff4d4f;
+    --danger-bg: rgba(255, 77, 79, 0.16);
+    --warning: #ffd43b;
+    --warning-bg: rgba(255, 212, 59, 0.18);
     --success: #3adb6a;
     --success-bg: rgba(58, 219, 106, 0.15);
     --info: #00c63b;
     --info-bg: rgba(0, 198, 59, 0.16);
-    --alert-danger-border: rgba(126, 160, 191, 0.5);
-    --alert-warning-border: rgba(179, 190, 204, 0.38);
+    --alert-danger-border: rgba(255, 77, 79, 0.5);
+    --alert-warning-border: rgba(255, 212, 59, 0.55);
     --alert-info-border: rgba(0, 198, 59, 0.4);
     --radius: 10px;
     --radius-sm: 6px;
@@ -274,10 +274,10 @@
     font-size: 13px;
     gap: 12px;
   }
-  .alert-item.danger { background: var(--danger-bg); border-color: var(--alert-danger-border); color: var(--text); }
-  .alert-item.warning { background: var(--warning-bg); border-color: var(--alert-warning-border); color: var(--text2); }
+  .alert-item.danger { background: var(--danger-bg); border-color: var(--alert-danger-border); color: var(--danger); }
+  .alert-item.warning { background: var(--warning-bg); border-color: var(--alert-warning-border); color: var(--warning); }
   .alert-item.info { background: var(--info-bg); border-color: var(--alert-info-border); color: #8ef3ab; }
-  .alert-item strong { color: var(--text); }
+  .alert-item strong { color: inherit; }
 
   /* Vehicle cards */
   .vehicle-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; margin-bottom: 1.5rem; }
