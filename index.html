@@ -596,7 +596,7 @@
           <div id="drop-zone" style="border:1.5px dashed var(--border2);border-radius:var(--radius);padding:2.5rem;text-align:center;cursor:pointer;transition:border .15s;margin-bottom:1.5rem" onclick="document.getElementById('pdf-input').click()" ondragover="event.preventDefault();this.style.borderColor='var(--accent2)'" ondragleave="this.style.borderColor='var(--border2)'" ondrop="handleDrop(event)">
             <div style="font-size:13px;color:var(--text2);margin-bottom:6px">Clique ou arraste os PDFs aqui</div>
             <div style="font-size:11px;color:var(--text3)">SENATRAN SNE · AMMPLA — vários arquivos de uma vez</div>
-            <input type="file" id="pdf-input" multiple accept=".pdf" style="display:none" onchange="processFiles(this.files)">
+            <input type="file" id="pdf-input" multiple accept=".pdf" style="display:none" onchange="handleFileInputChange(this)">
           </div>
 
           <div id="import-results"></div>
@@ -1325,7 +1325,6 @@ async function processFiles(files) {
   const pdfs = Array.from(files).filter(f => f.type === 'application/pdf' || f.name.endsWith('.pdf'));
   if (!pdfs.length) { showToast('Nenhum PDF selecionado', 'danger'); return; }
   const container = document.getElementById('import-results');
-  container.innerHTML = '';
   for (const file of pdfs) {
     const card = document.createElement('div');
     card.className = 'card';
@@ -1343,6 +1342,11 @@ async function processFiles(files) {
       card.innerHTML += `<div style="font-size:13px;color:var(--danger)">Erro: ${e.message}</div>`;
     }
   }
+}
+
+function handleFileInputChange(input) {
+  processFiles(input.files);
+  input.value = '';
 }
 
 function extractTextFromPDF(file) {
