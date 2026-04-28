@@ -808,6 +808,36 @@ let allVeiculos = [];
 let currentDetalheId = null;
 const DASH_VENCIMENTOS_LIMIT = 6;
 
+function getKnownCondutores() {
+  const nomes = new Set();
+  allMultas.forEach(m => {
+    const nome = (m.nome_condutor || '').trim();
+    if (nome) nomes.add(nome);
+  });
+  return Array.from(nomes).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+}
+
+function getKnownCondutorData() {
+  const data = {};
+  allMultas.forEach(m => {
+    const nome = (m.nome_condutor || '').trim();
+    if (!nome) return;
+    if (!data[nome]) data[nome] = { cnh: '' };
+    const cnh = (m.cnh_condutor || '').trim();
+    if (cnh) data[nome].cnh = cnh;
+  });
+  return data;
+}
+
+function escapeHtml(value = '') {
+  return String(value)
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
+}
+
 // ---- API ----
 async function api(method, table, body = null) {
   let url = `${SUPABASE_URL}/rest/v1/${table}`;
@@ -1377,6 +1407,15 @@ async function salvarMulta() {
 function editarMulta() {
   const m = allMultas.find(x => x.id === currentDetalheId);
   if (!m) return;
+  const condutores = getKnownCondutores();
+  const nomeAtual = (m.nome_condutor || '').trim();
+  const isNomeExistente = !!nomeAtual && condutores.includes(nomeAtual);
+  const condutorOptions = [
+    '<option value="">Selecione...</option>',
+    ...condutores.map(nome => `<option value="${escapeHtml(nome)}" ${isNomeExistente && nome === nomeAtual ? 'selected' : ''}>${escapeHtml(nome)}</option>`),
+    `<option value="__novo__" ${!isNomeExistente && nomeAtual ? 'selected' : ''}>+ Adicionar condutor</option>`
+  ].join('');
+
   document.getElementById('detalhe-content').innerHTML = `
     <p style="font-size:13px;color:var(--text2);margin-bottom:1.25rem">Atualize as informações desta multa</p>
 
@@ -1442,7 +1481,16 @@ function editarMulta() {
         </div>
         <div class="form-field">
           <label>Nome do condutor</label>
-          <input type="text" id="e-nome-condutor" value="${m.nome_condutor||''}" placeholder="Nome completo" style="width:100%">
+          <select id="e-nome-condutor-select" onchange="onCondutorNomeSelectChange()" style="width:100%">
+            ${condutorOptions}
+          </select>
+          <input
+            type="text"
+            id="e-nome-condutor-new"
+            value="${!isNomeExistente ? nomeAtual : ''}"
+            placeholder="Digite o nome do novo condutor"
+            style="width:100%;margin-top:8px;${!isNomeExistente && nomeAtual ? '' : 'display:none;'}"
+          >
         </div>
         <div class="form-field">
           <label>CNH do condutor</label>
@@ -1456,10 +1504,36 @@ function editarMulta() {
       <button class="btn btn-sm" onclick="verDetalhe('${m.id}')">Cancelar</button>
     </div>
   `;
+  onCondutorNomeSelectChange();
+}
+
+function onCondutorNomeSelectChange() {
+  const select = document.getElementById('e-nome-condutor-select');
+  const inputNovo = document.getElementById('e-nome-condutor-new');
+  const inputCnh = document.getElementById('e-cnh-condutor');
+  if (!select || !inputNovo) return;
+
+  const isNovo = select.value === '__novo__';
+  inputNovo.style.display = isNovo ? 'block' : 'none';
+
+  if (!isNovo && select.value) {
+    const condutoresData = getKnownCondutorData();
+    const cnhExistente = condutoresData[select.value]?.cnh || '';
+    if (inputCnh && cnhExistente && !inputCnh.value.trim()) inputCnh.value = cnhExistente;
+  }
+}
+
+function getNomeCondutorFormValue() {
+  const select = document.getElementById('e-nome-condutor-select');
+  const inputNovo = document.getElementById('e-nome-condutor-new');
+  if (!select) return null;
+  if (select.value === '__novo__') return (inputNovo?.value || '').trim() || null;
+  return select.value.trim() || null;
 }
 
 async function salvarEdicaoMulta(id) {
   const status = document.getElementById('e-status').value;
+  const nomeCondutor = getNomeCondutorFormValue();
   const payload = {
     status,
     boleto_disponivel: status === 'encaminhado' ? true : document.getElementById('e-boleto').value === 'true',
@@ -1470,7 +1544,7 @@ async function salvarEdicaoMulta(id) {
     data_pagamento: document.getElementById('e-dt-pagamento').value || null,
     condutor_indicado: document.getElementById('e-condutor-indicado').value === 'true',
     prazo_indicacao_condutor: document.getElementById('e-prazo-condutor').value || null,
-    nome_condutor: document.getElementById('e-nome-condutor').value || null,
+    nome_condutor: nomeCondutor,
     cnh_condutor: document.getElementById('e-cnh-condutor').value || null,
     updated_at: new Date().toISOString()
   };
