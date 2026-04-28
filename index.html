@@ -449,10 +449,6 @@
         Veículos
       </button>
       <div style="height:1px;background:var(--border);margin:8px 4px"></div>
-      <button class="nav-item" onclick="showPage('config')">
-        <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="8" cy="8" r="2.5"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.05 3.05l1.41 1.41M11.54 11.54l1.41 1.41M3.05 12.95l1.41-1.41M11.54 4.46l1.41-1.41"/></svg>
-        Configurações
-      </button>
     </nav>
   </aside>
 
@@ -514,11 +510,6 @@
             <option value="confirmado">Pagamento confirmado</option>
             <option value="vencida">Vencida</option>
           </select>
-          <select id="f-boleto" onchange="renderMultasList()">
-            <option value="">Boleto: todos</option>
-            <option value="nao">Sem boleto</option>
-            <option value="sim">Com boleto</option>
-          </select>
         </div>
         <div class="card" style="padding:0;overflow:hidden">
           <div class="table-wrap">
@@ -531,11 +522,10 @@
                   <th>Valor</th>
                   <th>Venc. boleto</th>
                   <th>Status</th>
-                  <th>Boleto</th>
                 </tr>
               </thead>
               <tbody id="multas-tbody">
-                <tr><td colspan="7" class="empty-state">Carregando...</td></tr>
+                <tr><td colspan="6" class="empty-state">Carregando...</td></tr>
               </tbody>
             </table>
           </div>
@@ -572,72 +562,41 @@
       <div class="content" id="detalhe-content"></div>
     </div>
 
-    <!-- Config -->
-    <div id="page-config" class="page" style="display:none">
-      <div class="topbar"><span class="topbar-title">Configurações</span></div>
-      <div class="content">
-        <div class="config-box">
-          <div class="config-info">
-            Esta aplicação usa o <strong>Supabase</strong> como banco de dados — gratuito, sem servidor próprio. Cole abaixo as credenciais do seu projeto para ativar o salvamento de dados.
-          </div>
-
-          <div class="card" style="margin-bottom:1.5rem">
-            <div class="card-title">Credenciais do Supabase</div>
-            <div style="display:flex;flex-direction:column;gap:12px">
-              <div class="form-field">
-                <label>Project URL</label>
-                <input type="text" id="cfg-url" placeholder="https://xxxx.supabase.co" style="width:100%">
-              </div>
-              <div class="form-field">
-                <label>Anon Key</label>
-                <input type="text" id="cfg-key" placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." style="width:100%">
-              </div>
-              <button class="btn btn-accent" onclick="salvarConfig()" style="align-self:flex-start">Salvar e conectar</button>
-            </div>
-          </div>
-
-          <div class="card">
-            <div class="card-title">Como configurar</div>
-            <ol class="step-list">
-              <li>Acesse <strong>supabase.com</strong> e crie uma conta gratuita</li>
-              <li>Clique em <strong>New project</strong>, escolha um nome e defina uma senha</li>
-              <li>Aguarde o projeto inicializar (1-2 minutos)</li>
-              <li>No menu lateral, vá em <strong>SQL Editor</strong> e cole o conteúdo do arquivo <code>setup.sql</code> que acompanha esta aplicação</li>
-              <li>Execute o script (botão <strong>Run</strong>). Isso cria as tabelas e dados de exemplo</li>
-              <li>Vá em <strong>Project Settings → API</strong>, copie a <strong>Project URL</strong> e a <strong>anon public key</strong></li>
-              <li>Cole aqui acima e clique em <strong>Salvar e conectar</strong></li>
-            </ol>
-          </div>
-        </div>
-      </div>
-    </div>
-
   </div>
 </div>
 
-<!-- Modal Nova/Editar Multa -->
+<!-- Modal Nova Multa (inserção inicial apenas) -->
 <div class="modal-overlay" id="modal-multa">
-  <div class="modal">
+  <div class="modal" style="max-width:480px">
     <div class="modal-title" id="modal-title">Nova multa</div>
     <input type="hidden" id="edit-id">
 
     <div class="form-section">
-      <div class="form-section-title">Veículo e infração</div>
+      <div class="form-section-title">Dados da infração</div>
       <div class="form-grid">
-        <div class="form-field">
+        <div class="form-field full">
           <label>Veículo *</label>
-          <select id="f-veiculo-form"></select>
+          <select id="f-veiculo-form" style="width:100%"></select>
         </div>
         <div class="form-field">
           <label>Órgão autuador *</label>
           <select id="f-orgao">
             <option value="PRF">PRF</option>
             <option value="DETRAN">DETRAN</option>
+            <option value="AMPLA">AMPLA</option>
             <option value="CET">CET</option>
             <option value="SEMOB">SEMOB</option>
             <option value="PMRV">PMRV</option>
             <option value="ANTT">ANTT</option>
             <option value="Outro">Outro</option>
+          </select>
+        </div>
+        <div class="form-field">
+          <label>Status inicial</label>
+          <select id="f-status-form">
+            <option value="pendente">Pendente pagamento</option>
+            <option value="encaminhado">Enc. para pagamento</option>
+            <option value="vencida">Vencida</option>
           </select>
         </div>
         <div class="form-field">
@@ -647,77 +606,6 @@
         <div class="form-field">
           <label>Valor da multa (R$) *</label>
           <input type="number" id="f-valor" placeholder="0,00" step="0.01" min="0" style="width:100%">
-        </div>
-      </div>
-    </div>
-
-    <div class="form-section">
-      <div class="form-section-title">Pagamento</div>
-      <div class="form-grid">
-        <div class="form-field">
-          <label>Status</label>
-          <select id="f-status-form">
-            <option value="pendente">Pendente pagamento</option>
-            <option value="encaminhado">Enc. para pagamento</option>
-            <option value="confirmado">Pagamento confirmado</option>
-            <option value="vencida">Vencida</option>
-          </select>
-        </div>
-        <div class="form-field">
-          <label>Boleto disponível</label>
-          <select id="f-boleto-form">
-            <option value="false">Não</option>
-            <option value="true">Sim</option>
-          </select>
-        </div>
-        <div class="form-field full">
-          <label>Código de barras</label>
-          <input type="text" id="f-barras" placeholder="Cole o código aqui" style="width:100%">
-        </div>
-        <div class="form-field">
-          <label>Data limite c/ desconto</label>
-          <input type="date" id="f-dt-desconto" style="width:100%">
-        </div>
-        <div class="form-field">
-          <label>Data limite s/ desconto</label>
-          <input type="date" id="f-dt-sem-desconto" style="width:100%">
-        </div>
-        <div class="form-field">
-          <label>Vencimento do boleto</label>
-          <input type="date" id="f-dt-vencimento" style="width:100%">
-        </div>
-        <div class="form-field">
-          <label>Valor pago (R$)</label>
-          <input type="number" id="f-valor-pago" placeholder="0,00" step="0.01" min="0" style="width:100%">
-        </div>
-        <div class="form-field">
-          <label>Data do pagamento</label>
-          <input type="date" id="f-dt-pagamento" style="width:100%">
-        </div>
-      </div>
-    </div>
-
-    <div class="form-section">
-      <div class="form-section-title">Condutor infrator</div>
-      <div class="form-grid">
-        <div class="form-field">
-          <label>Condutor indicado</label>
-          <select id="f-condutor-indicado">
-            <option value="false">Não</option>
-            <option value="true">Sim</option>
-          </select>
-        </div>
-        <div class="form-field">
-          <label>Prazo para indicação</label>
-          <input type="date" id="f-prazo-condutor" style="width:100%">
-        </div>
-        <div class="form-field">
-          <label>Nome do condutor</label>
-          <input type="text" id="f-nome-condutor" placeholder="Nome completo" style="width:100%">
-        </div>
-        <div class="form-field">
-          <label>CNH do condutor</label>
-          <input type="text" id="f-cnh-condutor" placeholder="Número da CNH" style="width:100%">
         </div>
       </div>
     </div>
@@ -754,24 +642,15 @@
 <div class="toast" id="toast"></div>
 
 <script>
-const SUPABASE_URL_KEY = 'multas_supabase_url';
-const SUPABASE_KEY_KEY = 'multas_supabase_key';
-
-let SUPABASE_URL = localStorage.getItem(SUPABASE_URL_KEY) || '';
-let SUPABASE_KEY = localStorage.getItem(SUPABASE_KEY_KEY) || '';
+const SUPABASE_URL = 'https://ceovbsajcstzpunjaabj.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNlb3Zic2FqY3N0enB1bmphYWJqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzczNTg1NTEsImV4cCI6MjA5MjkzNDU1MX0.zyCPJ8TvAFVIB59roBOdHf74RXxqkRGSAWJCWrhEwmE';
 let allMultas = [];
 let allVeiculos = [];
 let currentDetalheId = null;
 
 // ---- API ----
-async function api(method, table, body = null, id = null) {
-  if (!SUPABASE_URL || !SUPABASE_KEY) {
-    showToast('Configure as credenciais do Supabase primeiro', 'danger');
-    showPage('config');
-    return null;
-  }
+async function api(method, table, body = null) {
   let url = `${SUPABASE_URL}/rest/v1/${table}`;
-  if (id) url += `?id=eq.${id}`;
   const headers = {
     'apikey': SUPABASE_KEY,
     'Authorization': `Bearer ${SUPABASE_KEY}`,
@@ -794,10 +673,6 @@ async function api(method, table, body = null, id = null) {
 }
 
 async function apiGet(table, params = '') {
-  if (!SUPABASE_URL || !SUPABASE_KEY) {
-    showPage('config');
-    return null;
-  }
   const url = `${SUPABASE_URL}/rest/v1/${table}?${params}`;
   const headers = {
     'apikey': SUPABASE_KEY,
@@ -912,18 +787,15 @@ function renderDashboard() {
 function renderMultasList() {
   const fv = document.getElementById('f-veiculo')?.value || '';
   const fs = document.getElementById('f-status')?.value || '';
-  const fb = document.getElementById('f-boleto')?.value || '';
 
   let filtered = allMultas;
   if (fv) filtered = filtered.filter(m => m.veiculo_id === fv);
   if (fs) filtered = filtered.filter(m => m.status === fs);
-  if (fb === 'sim') filtered = filtered.filter(m => m.boleto_disponivel);
-  if (fb === 'nao') filtered = filtered.filter(m => !m.boleto_disponivel);
 
   const tbody = document.getElementById('multas-tbody');
   if (!tbody) return;
   if (filtered.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="7" class="empty-state">Nenhuma multa encontrada</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="6" class="empty-state">Nenhuma multa encontrada</td></tr>';
     return;
   }
   const today = new Date(); today.setHours(0,0,0,0);
@@ -938,7 +810,6 @@ function renderMultasList() {
       <td class="primary">R$ ${parseFloat(m.valor).toLocaleString('pt-BR',{minimumFractionDigits:2})}</td>
       <td style="color:var(--${vencClass || 'text2'})">${venc ? fmt(m.data_vencimento_boleto) : '—'}</td>
       <td>${statusBadge(m.status)}</td>
-      <td>${m.boleto_disponivel ? '<span class="badge badge-success">sim</span>' : '<span class="badge badge-danger">não</span>'}</td>
     </tr>`;
   }).join('');
 }
@@ -992,7 +863,7 @@ function verDetalhe(id) {
   document.getElementById('detalhe-content').innerHTML = `
     <div style="display:flex;gap:10px;margin-bottom:1.5rem;flex-wrap:wrap">
       ${statusBadge(m.status)}
-      ${m.boleto_disponivel ? '<span class="badge badge-success">boleto disponível</span>' : '<span class="badge badge-danger">sem boleto</span>'}
+      ${m.boleto_disponivel ? '<span class="badge badge-success">boleto disponível</span>' : '<span class="badge badge-warning">sem boleto</span>'}
       ${!m.condutor_indicado && m.prazo_indicacao_condutor ? '<span class="badge badge-warning">condutor não indicado</span>' : ''}
     </div>
 
@@ -1023,20 +894,17 @@ function verDetalhe(id) {
       <div class="card-title">Pagamento</div>
       <div class="detail-grid">
         <div class="detail-field"><label>Status</label>${statusBadge(m.status)}</div>
-        <div class="detail-field"><label>Boleto disponível</label><span class="${m.boleto_disponivel ? 'success' : 'danger'}">${m.boleto_disponivel ? 'Sim' : 'Não'}</span></div>
         <div class="detail-field"><label>Dt. limite c/ desconto</label><span class="${diasRestantes(m.data_limite_desconto) <= 5 ? 'danger' : ''}">${fmt(m.data_limite_desconto)}</span></div>
         <div class="detail-field"><label>Dt. limite s/ desconto</label><span>${fmt(m.data_limite_sem_desconto)}</span></div>
         <div class="detail-field"><label>Vencimento do boleto</label><span class="${diasRestantes(m.data_vencimento_boleto) <= 3 ? 'danger' : ''}">${fmt(m.data_vencimento_boleto)}</span></div>
         <div class="detail-field"><label>Valor pago</label><span class="mono">${m.valor_pago ? 'R$ ' + parseFloat(m.valor_pago).toLocaleString('pt-BR',{minimumFractionDigits:2}) : '—'}</span></div>
         <div class="detail-field"><label>Data do pagamento</label><span>${fmt(m.data_pagamento)}</span></div>
-        ${m.codigo_barras ? `<div class="detail-field" style="grid-column:1/-1"><label>Código de barras</label><span class="mono" style="font-size:12px;word-break:break-all">${m.codigo_barras}</span></div>` : ''}
       </div>
     </div>
 
     <div style="display:flex;gap:8px;flex-wrap:wrap">
-      <button class="btn btn-accent btn-sm" onclick="marcarPago('${m.id}')">Marcar como pago</button>
-      <button class="btn btn-sm" onclick="editarMulta()">Editar</button>
-      ${m.codigo_barras ? `<button class="btn btn-sm" onclick="copiarCodigo('${m.codigo_barras}')">Copiar código</button>` : ''}
+      <button class="btn btn-accent btn-sm" onclick="editarMulta()">Atualizar informações</button>
+      <button class="btn btn-sm" onclick="marcarPago('${m.id}')">Marcar como pago</button>
     </div>
   `;
 }
@@ -1046,45 +914,16 @@ async function marcarPago(id) {
   if (res) { showToast('Pagamento confirmado', 'success'); await loadAll(); verDetalhe(id); }
 }
 
-function copiarCodigo(cod) {
-  navigator.clipboard.writeText(cod).then(() => showToast('Código copiado', 'success'));
-}
-
-// ---- Modal multa ----
-function openModal(id = null) {
-  document.getElementById('edit-id').value = id || '';
-  document.getElementById('modal-title').textContent = id ? 'Editar multa' : 'Nova multa';
-  if (!id) {
-    ['f-veiculo-form','f-orgao','f-status-form'].forEach(i => {
-      const el = document.getElementById(i);
-      if (el) el.selectedIndex = 0;
-    });
-    ['f-data-infracao','f-valor','f-barras','f-dt-desconto','f-dt-sem-desconto','f-dt-vencimento','f-valor-pago','f-dt-pagamento','f-nome-condutor','f-cnh-condutor','f-prazo-condutor'].forEach(i => {
-      const el = document.getElementById(i);
-      if (el) el.value = '';
-    });
-    document.getElementById('f-boleto-form').value = 'false';
-    document.getElementById('f-condutor-indicado').value = 'false';
-  } else {
-    const m = allMultas.find(x => x.id === id);
-    if (!m) return;
-    document.getElementById('f-veiculo-form').value = m.veiculo_id;
-    document.getElementById('f-orgao').value = m.orgao_autuador;
-    document.getElementById('f-data-infracao').value = m.data_infracao || '';
-    document.getElementById('f-valor').value = m.valor || '';
-    document.getElementById('f-status-form').value = m.status;
-    document.getElementById('f-boleto-form').value = m.boleto_disponivel ? 'true' : 'false';
-    document.getElementById('f-barras').value = m.codigo_barras || '';
-    document.getElementById('f-dt-desconto').value = m.data_limite_desconto || '';
-    document.getElementById('f-dt-sem-desconto').value = m.data_limite_sem_desconto || '';
-    document.getElementById('f-dt-vencimento').value = m.data_vencimento_boleto || '';
-    document.getElementById('f-valor-pago').value = m.valor_pago || '';
-    document.getElementById('f-dt-pagamento').value = m.data_pagamento || '';
-    document.getElementById('f-condutor-indicado').value = m.condutor_indicado ? 'true' : 'false';
-    document.getElementById('f-prazo-condutor').value = m.prazo_indicacao_condutor || '';
-    document.getElementById('f-nome-condutor').value = m.nome_condutor || '';
-    document.getElementById('f-cnh-condutor').value = m.cnh_condutor || '';
-  }
+// ---- Modal multa (inserção inicial) ----
+function openModal() {
+  document.getElementById('edit-id').value = '';
+  document.getElementById('modal-title').textContent = 'Nova multa';
+  ['f-veiculo-form','f-orgao','f-status-form'].forEach(i => {
+    const el = document.getElementById(i);
+    if (el) el.selectedIndex = 0;
+  });
+  document.getElementById('f-data-infracao').value = '';
+  document.getElementById('f-valor').value = '';
   document.getElementById('modal-multa').classList.add('open');
 }
 
@@ -1103,17 +942,7 @@ async function salvarMulta() {
     data_infracao,
     valor: parseFloat(valor),
     status: document.getElementById('f-status-form').value,
-    boleto_disponivel: document.getElementById('f-boleto-form').value === 'true',
-    codigo_barras: document.getElementById('f-barras').value || null,
-    data_limite_desconto: document.getElementById('f-dt-desconto').value || null,
-    data_limite_sem_desconto: document.getElementById('f-dt-sem-desconto').value || null,
-    data_vencimento_boleto: document.getElementById('f-dt-vencimento').value || null,
-    valor_pago: document.getElementById('f-valor-pago').value ? parseFloat(document.getElementById('f-valor-pago').value) : null,
-    data_pagamento: document.getElementById('f-dt-pagamento').value || null,
-    condutor_indicado: document.getElementById('f-condutor-indicado').value === 'true',
-    prazo_indicacao_condutor: document.getElementById('f-prazo-condutor').value || null,
-    nome_condutor: document.getElementById('f-nome-condutor').value || null,
-    cnh_condutor: document.getElementById('f-cnh-condutor').value || null,
+    boleto_disponivel: document.getElementById('f-status-form').value === 'encaminhado',
     updated_at: new Date().toISOString()
   };
 
@@ -1136,7 +965,107 @@ async function salvarMulta() {
 }
 
 function editarMulta() {
-  if (currentDetalheId) openModal(currentDetalheId);
+  const m = allMultas.find(x => x.id === currentDetalheId);
+  if (!m) return;
+  document.getElementById('detalhe-content').innerHTML = `
+    <p style="font-size:13px;color:var(--text2);margin-bottom:1.25rem">Atualize as informações desta multa</p>
+
+    <div class="detail-card" style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:1.25rem 1.5rem;margin-bottom:1rem">
+      <div class="card-title">Pagamento</div>
+      <div class="form-grid">
+        <div class="form-field">
+          <label>Status</label>
+          <select id="e-status">
+            <option value="pendente" ${m.status==='pendente'?'selected':''}>Pendente pagamento</option>
+            <option value="encaminhado" ${m.status==='encaminhado'?'selected':''}>Enc. para pagamento</option>
+            <option value="confirmado" ${m.status==='confirmado'?'selected':''}>Pagamento confirmado</option>
+            <option value="vencida" ${m.status==='vencida'?'selected':''}>Vencida</option>
+          </select>
+        </div>
+        <div class="form-field">
+          <label>Boleto disponível</label>
+          <select id="e-boleto">
+            <option value="false" ${!m.boleto_disponivel?'selected':''}>Não</option>
+            <option value="true" ${m.boleto_disponivel?'selected':''}>Sim</option>
+          </select>
+        </div>
+        <div class="form-field">
+          <label>Data limite c/ desconto</label>
+          <input type="date" id="e-dt-desconto" value="${m.data_limite_desconto||''}" style="width:100%">
+        </div>
+        <div class="form-field">
+          <label>Data limite s/ desconto</label>
+          <input type="date" id="e-dt-sem-desconto" value="${m.data_limite_sem_desconto||''}" style="width:100%">
+        </div>
+        <div class="form-field">
+          <label>Vencimento do boleto</label>
+          <input type="date" id="e-dt-vencimento" value="${m.data_vencimento_boleto||''}" style="width:100%">
+        </div>
+        <div class="form-field">
+          <label>Valor pago (R$)</label>
+          <input type="number" id="e-valor-pago" value="${m.valor_pago||''}" step="0.01" min="0" style="width:100%">
+        </div>
+        <div class="form-field">
+          <label>Data do pagamento</label>
+          <input type="date" id="e-dt-pagamento" value="${m.data_pagamento||''}" style="width:100%">
+        </div>
+      </div>
+    </div>
+
+    <div class="detail-card" style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:1.25rem 1.5rem;margin-bottom:1rem">
+      <div class="card-title">Condutor infrator</div>
+      <div class="form-grid">
+        <div class="form-field">
+          <label>Condutor indicado</label>
+          <select id="e-condutor-indicado">
+            <option value="false" ${!m.condutor_indicado?'selected':''}>Não</option>
+            <option value="true" ${m.condutor_indicado?'selected':''}>Sim</option>
+          </select>
+        </div>
+        <div class="form-field">
+          <label>Prazo para indicação</label>
+          <input type="date" id="e-prazo-condutor" value="${m.prazo_indicacao_condutor||''}" style="width:100%">
+        </div>
+        <div class="form-field">
+          <label>Nome do condutor</label>
+          <input type="text" id="e-nome-condutor" value="${m.nome_condutor||''}" placeholder="Nome completo" style="width:100%">
+        </div>
+        <div class="form-field">
+          <label>CNH do condutor</label>
+          <input type="text" id="e-cnh-condutor" value="${m.cnh_condutor||''}" placeholder="Número da CNH" style="width:100%">
+        </div>
+      </div>
+    </div>
+
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-accent btn-sm" onclick="salvarEdicaoMulta('${m.id}')">Salvar alterações</button>
+      <button class="btn btn-sm" onclick="verDetalhe('${m.id}')">Cancelar</button>
+    </div>
+  `;
+}
+
+async function salvarEdicaoMulta(id) {
+  const status = document.getElementById('e-status').value;
+  const payload = {
+    status,
+    boleto_disponivel: status === 'encaminhado' ? true : document.getElementById('e-boleto').value === 'true',
+    data_limite_desconto: document.getElementById('e-dt-desconto').value || null,
+    data_limite_sem_desconto: document.getElementById('e-dt-sem-desconto').value || null,
+    data_vencimento_boleto: document.getElementById('e-dt-vencimento').value || null,
+    valor_pago: document.getElementById('e-valor-pago').value ? parseFloat(document.getElementById('e-valor-pago').value) : null,
+    data_pagamento: document.getElementById('e-dt-pagamento').value || null,
+    condutor_indicado: document.getElementById('e-condutor-indicado').value === 'true',
+    prazo_indicacao_condutor: document.getElementById('e-prazo-condutor').value || null,
+    nome_condutor: document.getElementById('e-nome-condutor').value || null,
+    cnh_condutor: document.getElementById('e-cnh-condutor').value || null,
+    updated_at: new Date().toISOString()
+  };
+  const res = await api('PATCH', `multas?id=eq.${id}`, payload);
+  if (res !== null) {
+    showToast('Multa atualizada', 'success');
+    await loadAll();
+    verDetalhe(id);
+  }
 }
 
 async function excluirMulta() {
@@ -1211,37 +1140,14 @@ function showPage(name) {
   document.getElementById(`page-${name}`).style.display = 'flex';
   document.getElementById(`page-${name}`).style.flexDirection = 'column';
   document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
-  const navMap = { dashboard: 0, multas: 1, veiculos: 2, config: 3 };
+  const navMap = { dashboard: 0, multas: 1, veiculos: 2 };
   const idx = navMap[name];
   if (idx !== undefined) document.querySelectorAll('.nav-item')[idx]?.classList.add('active');
 }
 
-// ---- Config ----
-function salvarConfig() {
-  const url = document.getElementById('cfg-url').value.trim().replace(/\/$/, '');
-  const key = document.getElementById('cfg-key').value.trim();
-  if (!url || !key) { showToast('Preencha URL e Key', 'danger'); return; }
-  SUPABASE_URL = url;
-  SUPABASE_KEY = key;
-  localStorage.setItem(SUPABASE_URL_KEY, url);
-  localStorage.setItem(SUPABASE_KEY_KEY, key);
-  showToast('Conectado! Carregando dados...', 'success');
-  loadAll();
-  showPage('dashboard');
-}
-
 // ---- Init ----
 window.addEventListener('DOMContentLoaded', () => {
-  if (document.getElementById('cfg-url')) document.getElementById('cfg-url').value = SUPABASE_URL;
-  if (document.getElementById('cfg-key')) document.getElementById('cfg-key').value = SUPABASE_KEY;
-
-  if (SUPABASE_URL && SUPABASE_KEY) {
-    loadAll();
-  } else {
-    showPage('config');
-    document.querySelectorAll('.kpi-value').forEach(el => el.textContent = '—');
-    document.getElementById('alert-list').innerHTML = '<div class="empty-state">Configure o Supabase para ver os dados</div>';
-  }
+  loadAll();
 });
 </script>
 </body>
