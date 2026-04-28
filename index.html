@@ -1337,7 +1337,7 @@ async function processFiles(files) {
     container.appendChild(card);
     try {
       const text = await extractTextFromPDF(file);
-      const extracted = parseBoletText(text);
+      const extracted = parseBoletText(text, file.name);
       renderExtracted(card, extracted, file.name);
     } catch (e) {
       card.innerHTML += `<div style="font-size:13px;color:var(--danger)">Erro: ${e.message}</div>`;
@@ -1366,7 +1366,7 @@ function extractTextFromPDF(file) {
   });
 }
 
-function parseBoletText(text) {
+function parseBoletText(text, filename) {
   const get = (patterns) => {
     for (const p of patterns) {
       const m = text.match(p);
@@ -1380,19 +1380,19 @@ function parseBoletText(text) {
                      /Placa[\s\/A-Z]*([A-Z]{2,3}[\s-]?[0-9][A-Z0-9][0-9]{2})/i])
     ?.replace(/[^A-Z0-9]/g,'') || null;
 
-  // Órgão autuador — AMMPLA ou SNE
+  // Órgão autuador
   let orgao = null;
   if (/AMMPLA/i.test(text)) orgao = 'AMMPLA';
   else {
-    orgao = get([/Órgão Competente[:\s]+(.+?)(?:Código|Auto|RENAINF|\n)/i,
-                 /Órgão Autuador[:\s]+(.+?)(?:Código|\n)/i]);
+    orgao = get([/Órgão Competente[:\s]+(.+?)(?:\s{2,}|Código|Auto|RENAINF)/i,
+                 /Órgão Autuador[:\s]+(.+?)(?:\s{2,}|Código)/i]);
     if (orgao) {
-      // shorten long names
       orgao = orgao
-        .replace(/DEPARTAMENTO NACIONAL DE INFRA-ESTRUTURA DE TRANSP/i, 'DNIT')
-        .replace(/PREF\. DE PE PETROLINA.*/i, 'PREF. PETROLINA')
+        .replace(/DEPARTAMENTO NACIONAL DE INFRA-ESTRUTURA DE TRANSP.*/i, 'DNIT')
+        .replace(/PREF\.\s*DE\s*PE\s*PETROLINA.*/i, 'PREF. PETROLINA')
         .replace(/PREFEITURA MUNICIPAL DE PETROLINA.*/i, 'PREF. PETROLINA')
-        .replace(/DER - PE.*/i, 'DER-PE')
+        .replace(/DER\s*-\s*PE.*/i, 'DER-PE')
+        .replace(/\s*\(.*?\)\s*$/, '')
         .trim().substring(0, 40);
     }
   }
@@ -1401,16 +1401,16 @@ function parseBoletText(text) {
   const auto = get([/Auto de Infra[çc][ãa]o[:\s]+([A-Z0-9]+)/i,
                     /N[ºo°]\s*do Auto de Infra[çc][ãa]o[:\s]+([A-Z0-9]+)/i]);
 
-  // Valor original
-  const valorStr = get([/Valor[:\s]+R\$\s*([\d.,]+)/i,
-                        /Valor \(R\$\)[:\s]*([\d.,]+)/i,
-                        /VALOR REAL \(R\$\)[^R]*R\$\s*([\d.,]+)/i]);
-  const valor = valorStr ? parseFloat(valorStr.replace('.','').replace(',','.')) : null;
+  // Valor original — busca "Valor: R$" mas NÃO "Valor a pagar"
+  const valorMatch = text.match(/(?<!pagar[:\s]{0,5})(?<!\bpagar\b.{0,10})\bValor[:\s]+R\$\s*([\d.,]+)/i)
+    || text.match(/\bValor\s*\(R\$\)[:\s]*([\d.,]+)/i)
+    || text.match(/VALOR REAL\s*\(R\$\)[^R]*R\$\s*([\d.,]+)/i);
+  const valor = valorMatch ? parseFloat(valorMatch[1].replace(/\./g,'').replace(',','.')) : null;
 
-  // Valor com desconto (valor a pagar)
+  // Valor com desconto
   const vDescStr = get([/Valor a pagar[:\s]+R\$\s*([\d.,]+)/i,
                         /VALOR A PAGAR[^R\d]*([\d.,]+)/i]);
-  const valor_com_desconto = vDescStr ? parseFloat(vDescStr.replace('.','').replace(',','.')) : null;
+  const valor_com_desconto = vDescStr ? parseFloat(vDescStr.replace(/\./g,'').replace(',','.')) : null;
 
   // Data de vencimento
   const vencStr = get([/Data de Vencimento[:\s]+([\d]{2}\/[\d]{2}\/[\d]{4})/i,
@@ -1418,28 +1418,31 @@ function parseBoletText(text) {
                        /DATA DO VENCIMENTO[^\d]*([\d]{2}\/[\d]{2}\/[\d]{4})/i]);
   const data_vencimento_boleto = vencStr ? vencStr.split('/').reverse().join('-') : null;
 
-  // Data da infração — AMMPLA tem campo "Data" explícito com hora
+  // Data da infração
+  // 1. AMMPLA: campo "Data DD/MM/YYYY Hora"
   let data_infracao = null;
   const dataInfStr = get([/Data\s+([\d]{2}\/[\d]{2}\/[\d]{4})\s+Hora/i,
                           /cometimento da infra[çc][ãa]o[\s\S]{0,60}?([\d]{2}\/[\d]{2}\/[\d]{4})/i]);
   if (dataInfStr) {
     data_infracao = dataInfStr.split('/').reverse().join('-');
   }
-  // Fallback: try to extract from filename (MULTA_PLACA_DD_MM_YYYY)
-  if (!data_infracao) {
-    const fn = text.match(/(\d{2})[\._](\d{2})[\._](\d{4})/);
-    // don't use — unreliable from filename context
+  // 2. Fallback: extrair do nome do arquivo MULTA_PLACA_DD_MM_YYYY ou MULTA_PLACA_DD.MM.YYYY
+  if (!data_infracao && filename) {
+    const fnMatch = filename.match(/(\d{2})[_.](\d{2})[_.](\d{4})/);
+    if (fnMatch) {
+      data_infracao = `${fnMatch[3]}-${fnMatch[2]}-${fnMatch[1]}`;
+    }
   }
 
-  // Código de barras — join all digit groups
+  // Código de barras
   const barrasMatch = text.match(/Código de Barras\s+([\d\s.\-]+)/i);
   let codigo_barras = null;
   if (barrasMatch) {
     codigo_barras = barrasMatch[1].replace(/[^0-9]/g, '');
   }
-  // AMMPLA format: four groups like 87670000001-4 31463271300-9 ...
+  // AMMPLA: quatro grupos com hífen ex: 87670000001-4 31463271300-9 ...
   if (!codigo_barras) {
-    const ampla = text.match(/(\d{5,}-\d\s+){3}\d{5,}-\d/);
+    const ampla = text.match(/(\d{5,}-\d[\s]+){3}\d{5,}-\d/);
     if (ampla) codigo_barras = ampla[0].replace(/[^0-9]/g,'');
   }
 
