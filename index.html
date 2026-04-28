@@ -448,6 +448,10 @@
         <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="1" y="5" width="14" height="7" rx="2"/><path d="M4 12v2M12 12v2M3 5l1.5-3h7L13 5"/><circle cx="4.5" cy="9" r="1"/><circle cx="11.5" cy="9" r="1"/></svg>
         Veículos
       </button>
+      <button class="nav-item" onclick="showPage('importar')">
+        <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M8 1v9M4 6l4 4 4-4M2 12v2h12v-2"/></svg>
+        Importar PDFs
+      </button>
       <div style="height:1px;background:var(--border);margin:8px 4px"></div>
     </nav>
   </aside>
@@ -575,6 +579,30 @@
         </div>
       </div>
       <div class="content" id="detalhe-content"></div>
+    </div>
+
+    <!-- Importar PDFs -->
+    <div id="page-importar" class="page" style="display:none">
+      <div class="topbar">
+        <span class="topbar-title">Importar boletos</span>
+      </div>
+      <div class="content">
+        <div style="max-width:720px">
+
+          <div style="background:var(--info-bg);border:1px solid rgba(106,159,212,.2);border-radius:var(--radius-sm);padding:1rem 1.25rem;font-size:13px;color:#a0bce8;margin-bottom:1.5rem;line-height:1.7">
+            Selecione um ou mais PDFs de boletos (SENATRAN SNE ou AMMPLA). A IA extrai os dados automaticamente e apresenta uma prévia para revisão antes de salvar.
+          </div>
+
+          <div id="drop-zone" style="border:1.5px dashed var(--border2);border-radius:var(--radius);padding:2.5rem;text-align:center;cursor:pointer;transition:border .15s;margin-bottom:1.5rem" onclick="document.getElementById('pdf-input').click()" ondragover="event.preventDefault();this.style.borderColor='var(--accent2)'" ondragleave="this.style.borderColor='var(--border2)'" ondrop="handleDrop(event)">
+            <div style="font-size:13px;color:var(--text2);margin-bottom:6px">Clique ou arraste os PDFs aqui</div>
+            <div style="font-size:11px;color:var(--text3)">SENATRAN SNE · AMMPLA — vários arquivos de uma vez</div>
+            <input type="file" id="pdf-input" multiple accept=".pdf" style="display:none" onchange="processFiles(this.files)">
+          </div>
+
+          <div id="import-results"></div>
+
+        </div>
+      </div>
     </div>
 
   </div>
@@ -1279,9 +1307,188 @@ function showPage(name) {
   document.getElementById(`page-${name}`).style.display = 'flex';
   document.getElementById(`page-${name}`).style.flexDirection = 'column';
   document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
-  const navMap = { dashboard: 0, multas: 1, veiculos: 2 };
+  const navMap = { dashboard: 0, multas: 1, veiculos: 2, importar: 3 };
   const idx = navMap[name];
   if (idx !== undefined) document.querySelectorAll('.nav-item')[idx]?.classList.add('active');
+}
+
+// ---- Importar PDFs ----
+const CLAUDE_API = 'https://api.anthropic.com/v1/messages';
+
+function handleDrop(e) {
+  e.preventDefault();
+  document.getElementById('drop-zone').style.borderColor = 'var(--border2)';
+  processFiles(e.dataTransfer.files);
+}
+
+async function processFiles(files) {
+  const pdfs = Array.from(files).filter(f => f.type === 'application/pdf' || f.name.endsWith('.pdf'));
+  if (!pdfs.length) { showToast('Nenhum PDF selecionado', 'danger'); return; }
+
+  const container = document.getElementById('import-results');
+  container.innerHTML = '';
+
+  for (const file of pdfs) {
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.style.cssText = 'margin-bottom:1rem;padding:1.25rem 1.5rem';
+    card.innerHTML = `<div style="display:flex;align-items:center;gap:10px;margin-bottom:.75rem">
+      <span style="font-size:13px;font-weight:500;color:var(--text)">${file.name}</span>
+      <span class="loader"></span><span style="font-size:12px;color:var(--text3)">Extraindo dados...</span>
+    </div>`;
+    container.appendChild(card);
+
+    try {
+      const base64 = await fileToBase64(file);
+      const extracted = await extractFromPDF(base64, file.name);
+      renderExtracted(card, extracted, file.name);
+    } catch (e) {
+      card.innerHTML += `<div style="font-size:13px;color:var(--danger)">Erro: ${e.message}</div>`;
+    }
+  }
+}
+
+function fileToBase64(file) {
+  return new Promise((res, rej) => {
+    const r = new FileReader();
+    r.onload = () => res(r.result.split(',')[1]);
+    r.onerror = () => rej(new Error('Falha ao ler arquivo'));
+    r.readAsDataURL(file);
+  });
+}
+
+async function extractFromPDF(base64, filename) {
+  const prompt = `Você é um extrator de dados de boletos de multas de trânsito brasileiros. Extraia os dados deste PDF e retorne APENAS um JSON válido, sem markdown, sem explicação.
+
+Campos a extrair:
+- placa: string (ex: "SOX7A11")
+- orgao_autuador: string (nome curto do órgão, ex: "DNIT", "PRF", "AMMPLA", "DER-PE", "DETRAN", "PREF. PETROLINA")
+- auto_infracao: string
+- data_infracao: string no formato YYYY-MM-DD (use a data do cometimento da infração, não a de expedição)
+- valor: number (valor original da multa, sem desconto)
+- valor_com_desconto: number (valor a pagar com desconto, se houver)
+- data_vencimento_boleto: string no formato YYYY-MM-DD
+- codigo_barras: string (todos os dígitos juntos, sem espaços ou hífens)
+- descricao_infracao: string (breve descrição)
+
+Se algum campo não for encontrado, use null.
+Retorne apenas o JSON, nada mais.`;
+
+  const res = await fetch(CLAUDE_API, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 800,
+      messages: [{
+        role: 'user',
+        content: [
+          { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: base64 } },
+          { type: 'text', text: prompt }
+        ]
+      }]
+    })
+  });
+
+  if (!res.ok) throw new Error(`API error ${res.status}`);
+  const data = await res.json();
+  const text = data.content?.find(c => c.type === 'text')?.text || '{}';
+  return JSON.parse(text.replace(/```json|```/g, '').trim());
+}
+
+function renderExtracted(card, d, filename) {
+  // Try to match placa to known vehicle
+  const veiculo = allVeiculos.find(v => v.placa === (d.placa || '').toUpperCase().replace(/[^A-Z0-9]/g,''));
+  const veiculoId = veiculo?.id || null;
+
+  const veiculoOpts = allVeiculos.map(v =>
+    `<option value="${v.id}" ${v.id === veiculoId ? 'selected' : ''}>${v.placa} · ${v.numero}</option>`
+  ).join('');
+
+  card.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
+      <div style="display:flex;align-items:center;gap:8px">
+        <span style="font-size:13px;font-weight:500;color:var(--text)">${filename}</span>
+        ${veiculo ? `<span class="badge badge-success">${veiculo.placa} identificada</span>` : '<span class="badge badge-warning">veículo não encontrado</span>'}
+      </div>
+      <div style="display:flex;gap:6px">
+        <button class="btn btn-accent btn-sm" onclick="confirmarImport(this, '${filename}')">Confirmar e salvar</button>
+        <button class="btn btn-sm" onclick="this.closest('.card').remove()">Descartar</button>
+      </div>
+    </div>
+    <div class="form-grid" style="gap:10px">
+      <div class="form-field">
+        <label>Veículo *</label>
+        <select class="f-imp-veiculo" style="width:100%">${veiculoOpts}</select>
+      </div>
+      <div class="form-field">
+        <label>Órgão autuador</label>
+        <input type="text" class="f-imp-orgao" value="${d.orgao_autuador || ''}" style="width:100%">
+      </div>
+      <div class="form-field">
+        <label>Data da infração</label>
+        <input type="date" class="f-imp-data" value="${d.data_infracao || ''}" style="width:100%">
+      </div>
+      <div class="form-field">
+        <label>Valor original (R$)</label>
+        <input type="number" class="f-imp-valor" value="${d.valor || ''}" step="0.01" style="width:100%">
+      </div>
+      <div class="form-field">
+        <label>Vencimento do boleto</label>
+        <input type="date" class="f-imp-vencimento" value="${d.data_vencimento_boleto || ''}" style="width:100%">
+      </div>
+      <div class="form-field">
+        <label>Auto de infração</label>
+        <input type="text" class="f-imp-auto" value="${d.auto_infracao || ''}" style="width:100%">
+      </div>
+      <div class="form-field full" style="grid-column:1/-1">
+        <label>Código de barras</label>
+        <input type="text" class="f-imp-barras" value="${d.codigo_barras || ''}" style="width:100%;font-family:var(--mono);font-size:12px">
+      </div>
+    </div>`;
+}
+
+async function confirmarImport(btn, filename) {
+  const card = btn.closest('.card');
+  const veiculo_id = card.querySelector('.f-imp-veiculo').value;
+  const orgao = card.querySelector('.f-imp-orgao').value.trim();
+  const data_infracao = card.querySelector('.f-imp-data').value;
+  const valor = card.querySelector('.f-imp-valor').value;
+  const data_vencimento_boleto = card.querySelector('.f-imp-vencimento').value || null;
+  const auto = card.querySelector('.f-imp-auto').value.trim();
+  const barras = card.querySelector('.f-imp-barras').value.trim();
+
+  if (!veiculo_id || !data_infracao || !valor) {
+    showToast('Preencha veículo, data e valor', 'danger'); return;
+  }
+
+  btn.textContent = 'Salvando...'; btn.disabled = true;
+
+  const payload = {
+    veiculo_id,
+    orgao_autuador: orgao || 'Outro',
+    data_infracao,
+    valor: parseFloat(valor),
+    status: 'encaminhado',
+    boleto_disponivel: true,
+    codigo_barras: barras || null,
+    data_vencimento_boleto,
+    updated_at: new Date().toISOString()
+  };
+
+  const res = await api('POST', 'multas', payload);
+  if (res) {
+    card.style.opacity = '.4';
+    card.style.pointerEvents = 'none';
+    const badge = document.createElement('div');
+    badge.style.cssText = 'text-align:center;padding:.5rem;font-size:13px;color:var(--success)';
+    badge.textContent = '✓ Salvo com sucesso';
+    card.appendChild(badge);
+    showToast(`${filename} importado`, 'success');
+    await loadAll();
+  } else {
+    btn.textContent = 'Confirmar e salvar'; btn.disabled = false;
+  }
 }
 
 // ---- Init ----
