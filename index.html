@@ -366,6 +366,46 @@
     font-size: 13px;
   }
 
+  /* Chart slider */
+  .chart-slider {
+    position: relative;
+    overflow: hidden;
+  }
+  .chart-slider-track {
+    display: flex;
+    width: 200%;
+    transition: transform .35s ease;
+  }
+  .chart-slide {
+    width: 50%;
+    flex-shrink: 0;
+  }
+  .chart-slide .card-title {
+    margin-bottom: .85rem;
+  }
+  .chart-slider-controls {
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: .5rem;
+  }
+  .slider-btn {
+    border: 1px solid var(--border2);
+    background: var(--bg3);
+    color: var(--text2);
+    border-radius: 999px;
+    width: 26px;
+    height: 26px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all .15s;
+  }
+  .slider-btn:hover {
+    color: var(--text);
+    border-color: var(--accent2);
+  }
+
   /* Config screen */
   .config-box {
     max-width: 540px;
@@ -495,8 +535,21 @@
             <canvas id="chart-mensal" height="180"></canvas>
           </div>
           <div class="card">
-            <div class="card-title">Valor em aberto por veículo</div>
-            <canvas id="chart-veiculos" height="180"></canvas>
+            <div class="chart-slider-controls">
+              <button class="slider-btn" onclick="toggleDashboardChartSlide()" aria-label="Alternar gráfico">↔</button>
+            </div>
+            <div class="chart-slider" id="chart-slider">
+              <div class="chart-slider-track" id="chart-slider-track">
+                <div class="chart-slide">
+                  <div class="card-title">Valor em aberto por veículo</div>
+                  <canvas id="chart-veiculos" height="180"></canvas>
+                </div>
+                <div class="chart-slide">
+                  <div class="card-title">Infrações por condutor identificado</div>
+                  <canvas id="chart-condutores" height="180"></canvas>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -697,6 +750,9 @@ const SUPABASE_URL = 'https://ceovbsajcstzpunjaabj.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNlb3Zic2FqY3N0enB1bmphYWJqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzczNTg1NTEsImV4cCI6MjA5MjkzNDU1MX0.zyCPJ8TvAFVIB59roBOdHf74RXxqkRGSAWJCWrhEwmE';
 let chartMensal = null;
 let chartVeiculos = null;
+let chartCondutores = null;
+let dashboardSlideIndex = 0;
+let dashboardSlideTimer = null;
 let allMultas = [];
 let allVeiculos = [];
 let currentDetalheId = null;
@@ -918,6 +974,44 @@ function renderDashboard() {
     });
   }
 
+  // Gráfico: infrações por condutor identificado (top 10)
+  const byCondutor = {};
+  allMultas.forEach(m => {
+    const nome = (m.nome_condutor || '').trim();
+    if (!nome || !m.condutor_indicado) return;
+    const label = nome.toUpperCase();
+    byCondutor[label] = (byCondutor[label] || 0) + 1;
+  });
+  const topCondutores = Object.entries(byCondutor).sort((a,b) => b[1]-a[1]).slice(0,10);
+  const ctxC = document.getElementById('chart-condutores');
+  if (ctxC) {
+    if (chartCondutores) chartCondutores.destroy();
+    chartCondutores = new Chart(ctxC, {
+      type: 'bar',
+      data: {
+        labels: topCondutores.map(x => x[0]),
+        datasets: [{
+          label: 'Infrações',
+          data: topCondutores.map(x => x[1]),
+          backgroundColor: 'rgba(106,159,212,0.55)',
+          borderColor: '#6a9fd4',
+          borderWidth: 1,
+          borderRadius: 4
+        }]
+      },
+      options: {
+        responsive: true,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { ticks: { color: '#5a5754', font: { size: 10 } }, grid: { display: false } },
+          y: { ticks: { color: '#5a5754', font: { size: 11 }, stepSize: 1 }, grid: { color: 'rgba(255,255,255,0.04)' }, beginAtZero: true }
+        }
+      }
+    });
+  }
+
+  initDashboardChartSlider();
+
   // Ranking veículos
   const rankingMap = {};
   allMultas.forEach(m => {
@@ -955,6 +1049,25 @@ function renderDashboard() {
         <span style="font-size:11px;font-family:var(--mono);color:var(--text2)">R$ ${Math.round(v.valor).toLocaleString('pt-BR')}</span>
       </div>
     </div>`).join('');
+}
+
+function setDashboardChartSlide(index) {
+  const track = document.getElementById('chart-slider-track');
+  if (!track) return;
+  dashboardSlideIndex = index > 0 ? 1 : 0;
+  track.style.transform = `translateX(-${dashboardSlideIndex * 50}%)`;
+}
+
+function toggleDashboardChartSlide() {
+  setDashboardChartSlide(dashboardSlideIndex === 0 ? 1 : 0);
+}
+
+function initDashboardChartSlider() {
+  setDashboardChartSlide(dashboardSlideIndex);
+  if (dashboardSlideTimer) clearInterval(dashboardSlideTimer);
+  dashboardSlideTimer = setInterval(() => {
+    toggleDashboardChartSlide();
+  }, 5000);
 }
 
 // ---- Multas list ----
