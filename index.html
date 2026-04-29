@@ -951,9 +951,9 @@ function renderDashboard() {
     vencDiv.innerHTML = '<div style="padding:.75rem 0;font-size:13px;color:var(--text3)">Nenhum vencimento nos próximos 30 dias</div>';
   } else {
     const gruposVencimento = [
-      { label: 'Esta semana', min: 0, max: 7, cor: 'danger' },
-      { label: 'Próxima semana', min: 8, max: 14, cor: 'warning' },
-      { label: 'Em 15 a 30 dias', min: 15, max: 30, cor: 'text2' }
+      { label: 'Esta semana', min: 0, max: 7, cor: 'danger', abertoInicial: true },
+      { label: 'Próxima semana', min: 8, max: 14, cor: 'warning', abertoInicial: false },
+      { label: 'Em 15 a 30 dias', min: 15, max: 30, cor: 'text2', abertoInicial: false }
     ];
 
     const htmlGrupos = gruposVencimento.map(g => {
@@ -972,12 +972,22 @@ function renderDashboard() {
           <span style="font-size:11px;color:var(--${g.cor});font-weight:600">${dias === 0 ? 'hoje' : `${dias}d`}</span>
         </div>`;
       }).join('');
-      return `<div style="margin-bottom:.75rem">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin:.25rem 0 .5rem 0">
-          <span style="font-size:12px;font-weight:600;color:var(--${g.cor})">${g.label}</span>
-          <span class="badge badge-${g.cor === 'text2' ? 'info' : g.cor}">R$ ${subtotal.toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2})}</span>
+      const badgeClass = g.cor === 'text2' ? 'info' : g.cor;
+      const aberto = g.abertoInicial;
+      return `<div style="margin-bottom:.75rem;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg2)">
+        <div onclick="const body=this.nextElementSibling;const icon=this.querySelector('[data-arrow]');const opened=body.dataset.open==='true';body.dataset.open=opened?'false':'true';body.style.maxHeight=opened?'0px':'1000px';icon.style.transform=opened?'rotate(0deg)':'rotate(90deg)'" onmouseenter="this.style.background='var(--bg3)'" onmouseleave="this.style.background='var(--bg2)'" style="display:flex;justify-content:space-between;align-items:center;padding:.55rem .7rem;cursor:pointer;transition:background .2s ease;border-radius:var(--radius)">
+          <div style="display:flex;align-items:center;gap:.5rem;min-width:0">
+            <span data-arrow style="display:inline-block;transition:transform .25s ease;color:var(--text2);transform:${aberto ? 'rotate(90deg)' : 'rotate(0deg)'}">▶</span>
+            <span style="font-size:12px;font-weight:600;color:var(--${g.cor})">${g.label}</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;justify-content:flex-end">
+            <span class="badge badge-${badgeClass}">R$ ${subtotal.toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2})}</span>
+            <span style="font-size:11px;color:var(--text2)">${itens.length} multa${itens.length !== 1 ? 's' : ''}</span>
+          </div>
         </div>
-        <div>${itensHtml}</div>
+        <div data-open="${aberto ? 'true' : 'false'}" style="max-height:${aberto ? '1000px' : '0px'};overflow:hidden;transition:max-height .28s ease;padding:${aberto ? '0 .45rem .45rem .45rem' : '0 .45rem'}">
+          ${itensHtml}
+        </div>
       </div>`;
     }).join('');
 
@@ -1153,11 +1163,19 @@ function renderUrgentAlerts({
   const alertList = document.getElementById('alert-list');
   if (!alertList) return;
 
-  const secao = (titulo, itens, emptyColor = 'text3') => `
-    <div style="margin-bottom:.9rem">
-      <div style="font-size:12px;color:var(--text2);font-weight:600;margin:.25rem 0 .5rem 0">${titulo}</div>
-      ${itens.length ? itens.join('') : `<div style="font-size:12px;color:var(--${emptyColor});padding:.2rem 0 .4rem 0">Nenhuma pendência nesta categoria</div>`}
-    </div>`;
+  const hasUrgenciaBoleto = semBoletoPendencias.some(m => {
+    if (!m.data_vencimento_boleto) return false;
+    const d = new Date(m.data_vencimento_boleto + 'T00:00:00');
+    const dias = Math.ceil((d - new Date(new Date().setHours(0,0,0,0))) / 86400000);
+    return dias <= 3;
+  });
+  const hasUrgenciaCondutor = condutorNaoIndicadoPendencias.some(m => m.diasPrazo <= 3);
+  const hasUrgenciaAguardando = aguardandoConfirmacaoPendencias.some(m => {
+    if (!m.data_vencimento_boleto) return false;
+    const d = new Date(m.data_vencimento_boleto + 'T00:00:00');
+    const dias = Math.ceil((d - new Date(new Date().setHours(0,0,0,0))) / 86400000);
+    return dias <= 3;
+  });
 
   const semBoletoItems = semBoletoPendencias.map(m => `<div class="alert-item danger" onclick="verDetalhe('${m.id}')" style="cursor:pointer">
       <span><strong style="font-family:var(--mono)">${m.veiculos?.placa || '—'}</strong> · ${m.orgao_autuador} · R$ ${parseFloat(m.valor || 0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2})}</span>
@@ -1178,11 +1196,29 @@ function renderUrgentAlerts({
       <span style="font-size:11px;color:var(--text2)">venc. ${m.data_vencimento_boleto ? fmt(m.data_vencimento_boleto) : '—'}</span>
     </div>`);
 
-  alertList.innerHTML = [
-    secao('Sem boleto disponível', semBoletoItems),
-    secao('Condutor não indicado', condutorItems),
-    secao('Aguardando confirmação', aguardandoItems)
-  ].join('');
+  const secaoAccordion = ({ titulo, itensHtml, total, urgencia }) => {
+    const aberto = urgencia;
+    return `<div style="margin-bottom:.75rem;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg2)">
+      <div onclick="const body=this.nextElementSibling;const icon=this.querySelector('[data-arrow]');const opened=body.dataset.open==='true';body.dataset.open=opened?'false':'true';body.style.maxHeight=opened?'0px':'1000px';body.style.padding=opened?'0 .45rem':'0 .45rem .45rem .45rem';icon.style.transform=opened?'rotate(0deg)':'rotate(90deg)'" onmouseenter="this.style.background='var(--bg3)'" onmouseleave="this.style.background='var(--bg2)'" style="display:flex;align-items:center;justify-content:space-between;gap:.5rem;padding:.55rem .7rem;cursor:pointer;transition:background .2s ease;border-radius:var(--radius)">
+        <div style="display:flex;align-items:center;gap:.5rem">
+          <span data-arrow style="display:inline-block;transition:transform .25s ease;color:var(--text2);transform:${aberto ? 'rotate(90deg)' : 'rotate(0deg)'}">▶</span>
+          <span style="font-size:12px;color:var(--text);font-weight:600">${titulo}</span>
+          ${urgencia ? '<span style="width:8px;height:8px;border-radius:50%;background:var(--danger);box-shadow:0 0 0 0 rgba(220,53,69,.7);animation:pulseDot 1.2s infinite"></span>' : ''}
+        </div>
+        <span class="badge badge-info">${total} multa${total !== 1 ? 's' : ''}</span>
+      </div>
+      <div data-open="${aberto ? 'true' : 'false'}" style="max-height:${aberto ? '1000px' : '0px'};overflow:hidden;transition:max-height .28s ease;padding:${aberto ? '0 .45rem .45rem .45rem' : '0 .45rem'}">
+        ${itensHtml || '<div style="font-size:12px;color:var(--text3);padding:.2rem 0 .4rem 0">Nenhuma pendência nesta categoria</div>'}
+      </div>
+    </div>`;
+  };
+
+  alertList.innerHTML = `
+    <style>@keyframes pulseDot{0%{transform:scale(1);opacity:1}70%{transform:scale(1.5);opacity:.2}100%{transform:scale(1);opacity:1}}</style>
+    ${secaoAccordion({ titulo: 'Sem boleto disponível', itensHtml: semBoletoItems.join(''), total: semBoletoPendencias.length, urgencia: hasUrgenciaBoleto })}
+    ${secaoAccordion({ titulo: 'Condutor não indicado', itensHtml: condutorItems.join(''), total: condutorNaoIndicadoPendencias.length, urgencia: hasUrgenciaCondutor })}
+    ${secaoAccordion({ titulo: 'Aguardando confirmação', itensHtml: aguardandoItems.join(''), total: aguardandoConfirmacaoPendencias.length, urgencia: hasUrgenciaAguardando })}
+  `;
 }
 
 function setUrgentAlertMode(mode) {
