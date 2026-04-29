@@ -967,15 +967,24 @@ function renderDashboard() {
       const itensHtml = itens.map(m => {
         const d = new Date(m.data_vencimento_boleto + 'T00:00:00');
         const dias = Math.ceil((d - today) / 86400000);
+        const itemClass = g.label === 'Esta semana'
+          ? (dias <= 2 ? 'danger' : 'warning')
+          : 'success';
+        const badgePrazo = dias <= 2 ? 'urgente' : dias <= 7 ? 'atenção' : '';
         return `<div class="alert-item" onclick="verDetalhe('${m.id}')" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer">
-          <span><strong style="font-family:var(--mono);color:var(--accent)">${m.veiculos?.placa || '—'}</strong> | ${m.orgao_autuador} | R$ ${parseFloat(m.valor || 0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2})}</span>
-          <span style="font-size:11px;color:var(--${g.cor});font-weight:600">${dias === 0 ? 'hoje' : `${dias}d`}</span>
+          <span class="alert-item ${itemClass}" style="flex:1;display:flex;justify-content:space-between;align-items:center;gap:.5rem">
+            <span><strong style="font-family:var(--mono);color:var(--accent)">${m.veiculos?.placa || '—'}</strong> | ${m.orgao_autuador} | R$ ${parseFloat(m.valor || 0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2})}</span>
+            <span style="display:flex;align-items:center;gap:.45rem;white-space:nowrap">
+              ${badgePrazo ? `<span class="badge badge-${itemClass}">${badgePrazo}</span>` : ''}
+              <span style="font-size:11px;color:var(--${itemClass === 'success' ? 'success' : itemClass});font-weight:600">${dias === 0 ? 'hoje' : `${dias}d`}</span>
+            </span>
+          </span>
         </div>`;
       }).join('');
       const badgeClass = g.cor === 'text2' ? 'info' : g.cor;
       const aberto = g.abertoInicial;
       return `<div style="margin-bottom:.75rem;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg2)">
-        <div onclick="const body=this.nextElementSibling;const icon=this.querySelector('[data-arrow]');const opened=body.dataset.open==='true';body.dataset.open=opened?'false':'true';body.style.maxHeight=opened?'0px':'1000px';icon.style.transform=opened?'rotate(0deg)':'rotate(90deg)'" onmouseenter="this.style.background='var(--bg3)'" onmouseleave="this.style.background='var(--bg2)'" style="display:flex;justify-content:space-between;align-items:center;padding:.55rem .7rem;cursor:pointer;transition:background .2s ease;border-radius:var(--radius)">
+        <div onclick="const body=this.nextElementSibling;const inner=body.firstElementChild;const icon=this.querySelector('[data-arrow]');const opened=body.dataset.open==='true';body.dataset.open=opened?'false':'true';body.style.maxHeight=opened?'0px':inner.scrollHeight + 'px';icon.style.transform=opened?'rotate(0deg)':'rotate(90deg)'" onmouseenter="this.style.background='var(--bg3)'" onmouseleave="this.style.background='var(--bg2)'" style="display:flex;justify-content:space-between;align-items:center;padding:.55rem .7rem;cursor:pointer;transition:background .2s ease;border-radius:var(--radius)">
           <div style="display:flex;align-items:center;gap:.5rem;min-width:0">
             <span data-arrow style="display:inline-block;transition:transform .25s ease;color:var(--text2);transform:${aberto ? 'rotate(90deg)' : 'rotate(0deg)'}">▶</span>
             <span style="font-size:12px;font-weight:600;color:var(--${g.cor})">${g.label}</span>
@@ -985,8 +994,10 @@ function renderDashboard() {
             <span style="font-size:11px;color:var(--text2)">${itens.length} multa${itens.length !== 1 ? 's' : ''}</span>
           </div>
         </div>
-        <div data-open="${aberto ? 'true' : 'false'}" style="max-height:${aberto ? '1000px' : '0px'};overflow:hidden;transition:max-height .28s ease;padding:${aberto ? '0 .45rem .45rem .45rem' : '0 .45rem'}">
-          ${itensHtml}
+        <div data-open="${aberto ? 'true' : 'false'}" style="max-height:${aberto ? 'auto' : '0px'};overflow:hidden;transition:max-height 0.3s ease">
+          <div style="padding:0 .45rem .45rem .45rem">
+            ${itensHtml}
+          </div>
         </div>
       </div>`;
     }).join('');
@@ -1183,23 +1194,35 @@ function renderUrgentAlerts({
     </div>`);
 
   const condutorItems = condutorNaoIndicadoPendencias.map(m => {
-    const badgeClass = m.diasPrazo <= 3 ? 'danger' : m.diasPrazo <= 10 ? 'warning' : 'info';
+    const badgeClass = m.diasPrazo <= 3 ? 'danger' : m.diasPrazo <= 10 ? 'warning' : 'success';
+    const badgeLabel = m.diasPrazo <= 3 ? 'urgente' : m.diasPrazo <= 10 ? 'atenção' : '';
     const prazo = m.diasPrazo < 0 ? `${Math.abs(m.diasPrazo)}d venc.` : m.diasPrazo === 0 ? 'vence hoje' : `${m.diasPrazo}d`;
     return `<div class="alert-item ${badgeClass}" onclick="verDetalhe('${m.id}')" style="cursor:pointer">
       <span><strong style="font-family:var(--mono)">${m.veiculos?.placa || '—'}</strong> · ${m.orgao_autuador} · prazo ${prazo}</span>
-      <span class="badge badge-${badgeClass}">${prazo}</span>
+      ${badgeLabel ? `<span class="badge badge-${badgeClass}">${badgeLabel}</span>` : ''}
     </div>`;
   });
 
-  const aguardandoItems = aguardandoConfirmacaoPendencias.map(m => `<div class="alert-item info" onclick="verDetalhe('${m.id}')" style="cursor:pointer">
+  const aguardandoItems = aguardandoConfirmacaoPendencias.map(m => {
+    let dias = null;
+    if (m.data_vencimento_boleto) {
+      dias = Math.ceil((new Date(m.data_vencimento_boleto + 'T00:00:00') - new Date(new Date().setHours(0,0,0,0))) / 86400000);
+    }
+    const badgeClass = dias !== null && dias <= 2 ? 'danger' : dias !== null && dias <= 7 ? 'warning' : 'success';
+    const badgeLabel = dias !== null && dias <= 2 ? 'urgente' : dias !== null && dias <= 7 ? 'atenção' : '';
+    return `<div class="alert-item ${badgeClass}" onclick="verDetalhe('${m.id}')" style="cursor:pointer">
       <span><strong style="font-family:var(--mono)">${m.veiculos?.placa || '—'}</strong> · ${m.orgao_autuador} · R$ ${parseFloat(m.valor || 0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2})}</span>
-      <span style="font-size:11px;color:var(--text2)">venc. ${m.data_vencimento_boleto ? fmt(m.data_vencimento_boleto) : '—'}</span>
-    </div>`);
+      <span style="display:flex;align-items:center;gap:.45rem">
+        ${badgeLabel ? `<span class="badge badge-${badgeClass}">${badgeLabel}</span>` : ''}
+        <span style="font-size:11px;color:var(--text2)">venc. ${m.data_vencimento_boleto ? fmt(m.data_vencimento_boleto) : '—'}</span>
+      </span>
+    </div>`;
+  });
 
   const secaoAccordion = ({ titulo, itensHtml, total, urgencia }) => {
     const aberto = urgencia;
     return `<div style="margin-bottom:.75rem;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg2)">
-      <div onclick="const body=this.nextElementSibling;const icon=this.querySelector('[data-arrow]');const opened=body.dataset.open==='true';body.dataset.open=opened?'false':'true';body.style.maxHeight=opened?'0px':'1000px';body.style.padding=opened?'0 .45rem':'0 .45rem .45rem .45rem';icon.style.transform=opened?'rotate(0deg)':'rotate(90deg)'" onmouseenter="this.style.background='var(--bg3)'" onmouseleave="this.style.background='var(--bg2)'" style="display:flex;align-items:center;justify-content:space-between;gap:.5rem;padding:.55rem .7rem;cursor:pointer;transition:background .2s ease;border-radius:var(--radius)">
+      <div onclick="const body=this.nextElementSibling;const inner=body.firstElementChild;const icon=this.querySelector('[data-arrow]');const opened=body.dataset.open==='true';body.dataset.open=opened?'false':'true';body.style.maxHeight=opened?'0px':inner.scrollHeight + 'px';icon.style.transform=opened?'rotate(0deg)':'rotate(90deg)'" onmouseenter="this.style.background='var(--bg3)'" onmouseleave="this.style.background='var(--bg2)'" style="display:flex;align-items:center;justify-content:space-between;gap:.5rem;padding:.55rem .7rem;cursor:pointer;transition:background .2s ease;border-radius:var(--radius)">
         <div style="display:flex;align-items:center;gap:.5rem">
           <span data-arrow style="display:inline-block;transition:transform .25s ease;color:var(--text2);transform:${aberto ? 'rotate(90deg)' : 'rotate(0deg)'}">▶</span>
           <span style="font-size:12px;color:var(--text);font-weight:600">${titulo}</span>
@@ -1207,8 +1230,10 @@ function renderUrgentAlerts({
         </div>
         <span class="badge badge-info">${total} multa${total !== 1 ? 's' : ''}</span>
       </div>
-      <div data-open="${aberto ? 'true' : 'false'}" style="max-height:${aberto ? '1000px' : '0px'};overflow:hidden;transition:max-height .28s ease;padding:${aberto ? '0 .45rem .45rem .45rem' : '0 .45rem'}">
-        ${itensHtml || '<div style="font-size:12px;color:var(--text3);padding:.2rem 0 .4rem 0">Nenhuma pendência nesta categoria</div>'}
+      <div data-open="${aberto ? 'true' : 'false'}" style="max-height:${aberto ? 'auto' : '0px'};overflow:hidden;transition:max-height 0.3s ease">
+        <div style="padding:0 .45rem .45rem .45rem">
+          ${itensHtml || '<div style="font-size:12px;color:var(--text3);padding:.2rem 0 .4rem 0">Nenhuma pendência nesta categoria</div>'}
+        </div>
       </div>
     </div>`;
   };
@@ -1219,6 +1244,12 @@ function renderUrgentAlerts({
     ${secaoAccordion({ titulo: 'Condutor não indicado', itensHtml: condutorItems.join(''), total: condutorNaoIndicadoPendencias.length, urgencia: hasUrgenciaCondutor })}
     ${secaoAccordion({ titulo: 'Aguardando confirmação', itensHtml: aguardandoItems.join(''), total: aguardandoConfirmacaoPendencias.length, urgencia: hasUrgenciaAguardando })}
   `;
+
+  alertList.querySelectorAll('[data-open]').forEach((body) => {
+    const opened = body.dataset.open === 'true';
+    const inner = body.firstElementChild;
+    body.style.maxHeight = opened && inner ? `${inner.scrollHeight}px` : '0px';
+  });
 }
 
 function setUrgentAlertMode(mode) {
