@@ -1172,6 +1172,14 @@ function renderUrgentAlerts({
   const alertList = document.getElementById('alert-list');
   if (!alertList) return;
 
+  const pulseStyleId = 'urgent-pulse-keyframes';
+  if (!document.getElementById(pulseStyleId)) {
+    const style = document.createElement('style');
+    style.id = pulseStyleId;
+    style.textContent = '@keyframes pulse { 0% { opacity: 1; } 100% { opacity: 0.3; } }';
+    document.head.appendChild(style);
+  }
+
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
@@ -1184,6 +1192,15 @@ function renderUrgentAlerts({
     return '';
   };
 
+  const urgencyBadgeWithDate = (dias, data, isPrazo = false) => {
+    const badge = urgencyBadge(dias);
+    if (!badge) return '';
+    const dataFmt = data ? data.split('-').reverse().join('/') : '';
+    const label = isPrazo ? `prazo: ${dataFmt}` : dataFmt;
+    const dataHtml = dataFmt ? `<span style="font-size:11px;color:var(--text3)">${label}</span>` : '';
+    return `<span style="display:inline-flex;align-items:center;gap:6px">${badge}${dataHtml}</span>`;
+  };
+
   const semBoletoItems = semBoletoPendencias.map(m => `<div onclick="verDetalhe('${m.id}')" style="${itemBaseStyle}">
       <span><strong style="font-family:var(--mono);color:var(--accent)">${m.veiculos?.placa || '—'}</strong> · ${m.orgao_autuador} · R$ ${parseFloat(m.valor || 0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2})}</span>
     </div>`);
@@ -1194,7 +1211,7 @@ function renderUrgentAlerts({
       : null;
     return `<div onclick="verDetalhe('${m.id}')" style="${itemBaseStyle}">
       <span><strong style="font-family:var(--mono);color:var(--accent)">${m.veiculos?.placa || '—'}</strong> · ${m.orgao_autuador} · prazo ${m.prazo_indicacao_condutor ? fmt(m.prazo_indicacao_condutor) : '—'}</span>
-      ${dias !== null ? urgencyBadge(dias) : ''}
+      ${dias !== null ? urgencyBadgeWithDate(dias, m.prazo_indicacao_condutor, true) : ''}
     </div>`;
   });
 
@@ -1204,16 +1221,18 @@ function renderUrgentAlerts({
       : null;
     return `<div onclick="verDetalhe('${m.id}')" style="${itemBaseStyle}">
       <span><strong style="font-family:var(--mono);color:var(--accent)">${m.veiculos?.placa || '—'}</strong> · ${m.orgao_autuador} · R$ ${parseFloat(m.valor || 0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2})}</span>
-      ${dias !== null ? urgencyBadge(dias) : ''}
+      ${dias !== null ? urgencyBadgeWithDate(dias, m.data_vencimento_boleto) : ''}
     </div>`;
   });
 
-  const secaoAccordion = ({ titulo, itensHtml, total, abertoInicial = false }) => {
+  const pulsingDot = '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--danger);margin-left:6px;animation:pulse 1s ease-in-out infinite alternate"></span>';
+
+  const secaoAccordion = ({ titulo, itensHtml, total, abertoInicial = false, hasUrgente = false }) => {
     return `<div style="margin-bottom:.75rem;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg2)">
       <div onclick="const body=this.nextElementSibling;const inner=body.firstElementChild;const icon=this.querySelector('[data-arrow]');const opened=body.dataset.open==='true';body.dataset.open=opened?'false':'true';body.style.maxHeight=opened?'0px':inner.scrollHeight + 'px';icon.style.transform=opened?'rotate(0deg)':'rotate(90deg)'" onmouseenter="this.style.background='var(--bg3)'" onmouseleave="this.style.background='var(--bg2)'" style="display:flex;align-items:center;justify-content:space-between;gap:.5rem;padding:.55rem .7rem;cursor:pointer;transition:background .2s ease;border-radius:var(--radius)">
         <div style="display:flex;align-items:center;gap:.5rem">
           <span data-arrow style="display:inline-block;transition:transform .25s ease;color:var(--text2);transform:${abertoInicial ? 'rotate(90deg)' : 'rotate(0deg)'}">▶</span>
-          <span style="font-size:12px;color:var(--text);font-weight:600">${titulo}</span>
+          <span style="font-size:12px;color:var(--text);font-weight:600;display:inline-flex;align-items:center">${titulo}${hasUrgente ? pulsingDot : ''}</span>
         </div>
         <span class="badge badge-info">${total} multa${total !== 1 ? 's' : ''}</span>
       </div>
@@ -1225,10 +1244,14 @@ function renderUrgentAlerts({
     </div>`;
   };
 
+  const hasUrgenteSemBoleto = semBoletoPendencias.length > 0;
+  const hasUrgenteCondutor = condutorNaoIndicadoPendencias.some(m => m.prazo_indicacao_condutor && Math.ceil((new Date(m.prazo_indicacao_condutor + 'T00:00:00') - today) / 86400000) <= 3);
+  const hasUrgenteAguardando = aguardandoConfirmacaoPendencias.some(m => m.data_vencimento_boleto && Math.ceil((new Date(m.data_vencimento_boleto + 'T00:00:00') - today) / 86400000) <= 3);
+
   alertList.innerHTML = `
-    ${secaoAccordion({ titulo: 'Sem boleto disponível', itensHtml: semBoletoItems.join(''), total: semBoletoPendencias.length })}
-    ${secaoAccordion({ titulo: 'Condutor não indicado', itensHtml: condutorItems.join(''), total: condutorNaoIndicadoPendencias.length })}
-    ${secaoAccordion({ titulo: 'Aguardando confirmação', itensHtml: aguardandoItems.join(''), total: aguardandoConfirmacaoPendencias.length, abertoInicial: true })}
+    ${secaoAccordion({ titulo: 'Sem boleto disponível', itensHtml: semBoletoItems.join(''), total: semBoletoPendencias.length, hasUrgente: hasUrgenteSemBoleto })}
+    ${secaoAccordion({ titulo: 'Condutor não indicado', itensHtml: condutorItems.join(''), total: condutorNaoIndicadoPendencias.length, hasUrgente: hasUrgenteCondutor })}
+    ${secaoAccordion({ titulo: 'Aguardando confirmação', itensHtml: aguardandoItems.join(''), total: aguardandoConfirmacaoPendencias.length, abertoInicial: true, hasUrgente: hasUrgenteAguardando })}
   `;
 
   alertList.querySelectorAll('[data-open]').forEach((body) => {
