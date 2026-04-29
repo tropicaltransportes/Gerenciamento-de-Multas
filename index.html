@@ -565,15 +565,11 @@
 
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:1.25rem;margin-bottom:1.25rem">
           <div class="card">
-            <div class="card-title">Alertas urgentes</div>
-            <div class="alert-toggle">
-              <button id="btn-alerta-boleto" class="btn btn-sm btn-accent" onclick="setUrgentAlertMode('boleto')">Vencimento de boletos</button>
-              <button id="btn-alerta-condutor" class="btn btn-sm" onclick="setUrgentAlertMode('condutor')">Prazo de condutor infrator</button>
-            </div>
+            <div class="card-title">Ações pendentes</div>
             <div id="alert-list" class="alert-list"><div class="empty-state">Carregando...</div></div>
           </div>
           <div class="card">
-            <div class="card-title">Vencimentos — próximos 30 dias</div>
+            <div class="card-title">Vencimentos próximos 30 dias</div>
             <div id="dash-vencimentos"></div>
           </div>
         </div>
@@ -925,41 +921,24 @@ function renderDashboard() {
   document.getElementById('kpi-condutor').textContent = condutorPendente.length;
   document.getElementById('kpi-pagas').textContent = pagas.length;
 
-  // Alertas
-  const boletoAlerts = [];
-  venc7.forEach(m => {
-    const d = new Date(m.data_vencimento_boleto + 'T00:00:00');
-    const dias = Math.ceil((d - today) / 86400000);
-    const placa = m.veiculos?.placa || '—';
-    const tipo = dias <= 2 ? 'danger' : 'warning';
-    boletoAlerts.push({ tipo, text: `${placa} · vence em <strong>${dias} dia${dias !== 1 ? 's' : ''}</strong> · R$ ${parseFloat(m.valor).toLocaleString('pt-BR',{minimumFractionDigits:2})}`, badge: dias <= 2 ? 'urgente' : 'atenção' });
-  });
-  semBoleto.forEach(m => {
-    boletoAlerts.push({ tipo: 'danger', text: `${m.veiculos?.placa || '—'} · sem boleto disponível · R$ ${parseFloat(m.valor).toLocaleString('pt-BR',{minimumFractionDigits:2})}`, badge: 'sem boleto' });
-  });
-
-  const condutorAlerts = [];
-  condutorPendente.forEach(m => {
-    if (!m.prazo_indicacao_condutor) return;
+  // Ações pendentes
+  const semBoletoPendencias = allMultas.filter(m => !m.boleto_disponivel && m.status !== 'confirmado');
+  const condutorNaoIndicadoPendencias = allMultas.filter(m => {
+    if (isCondutorIndicado(m) || !m.prazo_indicacao_condutor) return false;
     const d = new Date(m.prazo_indicacao_condutor + 'T00:00:00');
-    if (Number.isNaN(d.getTime())) return;
+    return !Number.isNaN(d.getTime());
+  }).map(m => {
+    const d = new Date(m.prazo_indicacao_condutor + 'T00:00:00');
     const dias = Math.ceil((d - today) / 86400000);
-    if (dias <= 15) {
-      const tipo = dias <= 2 ? 'danger' : 'warning';
-      const prazoLabel = dias < 0
-        ? `vencido há <strong>${Math.abs(dias)} dia${Math.abs(dias) !== 1 ? 's' : ''}</strong>`
-        : dias === 0
-          ? 'vence <strong>hoje</strong>'
-          : `prazo em <strong>${dias} dia${dias !== 1 ? 's' : ''}</strong>`;
-      condutorAlerts.push({
-        tipo,
-        text: `${m.veiculos?.placa || '—'} · condutor não indicado · ${prazoLabel}`,
-        badge: dias <= 2 ? 'urgente' : 'condutor'
-      });
-    }
-  });
+    return { ...m, diasPrazo: dias };
+  }).sort((a, b) => a.diasPrazo - b.diasPrazo);
+  const aguardandoConfirmacaoPendencias = allMultas.filter(m => m.status === 'encaminhado');
 
-  renderUrgentAlerts({ boletoAlerts, condutorAlerts });
+  renderUrgentAlerts({
+    semBoletoPendencias,
+    condutorNaoIndicadoPendencias,
+    aguardandoConfirmacaoPendencias
+  });
 
   // Vencimentos próximos 30 dias
   const venc30 = allMultas.filter(m => {
@@ -971,26 +950,38 @@ function renderDashboard() {
   if (venc30.length === 0) {
     vencDiv.innerHTML = '<div style="padding:.75rem 0;font-size:13px;color:var(--text3)">Nenhum vencimento nos próximos 30 dias</div>';
   } else {
-    const visibleVenc = venc30.slice(0, DASH_VENCIMENTOS_LIMIT);
-    const htmlItems = visibleVenc.map(m => {
-      const d = new Date(m.data_vencimento_boleto + 'T00:00:00');
-      const dias = Math.ceil((d - today) / 86400000);
-      const cls = dias <= 3 ? 'danger' : dias <= 7 ? 'warning' : 'text2';
-      return `<div onclick="verDetalhe('${m.id}')" style="display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid var(--border);cursor:pointer">
-        <div>
-          <span style="font-family:var(--mono);font-size:13px;color:var(--accent)">${m.veiculos?.placa || '—'}</span>
-          <span style="font-size:11px;color:var(--text3);margin-left:8px">${m.orgao_autuador}</span>
+    const gruposVencimento = [
+      { label: 'Esta semana', min: 0, max: 7, cor: 'danger' },
+      { label: 'Próxima semana', min: 8, max: 14, cor: 'warning' },
+      { label: 'Em 15 a 30 dias', min: 15, max: 30, cor: 'text2' }
+    ];
+
+    const htmlGrupos = gruposVencimento.map(g => {
+      const itens = venc30.filter(m => {
+        const d = new Date(m.data_vencimento_boleto + 'T00:00:00');
+        const dias = Math.ceil((d - today) / 86400000);
+        return dias >= g.min && dias <= g.max;
+      });
+      if (!itens.length) return '';
+      const subtotal = itens.reduce((acc, m) => acc + parseFloat(m.valor || 0), 0);
+      const itensHtml = itens.map(m => {
+        const d = new Date(m.data_vencimento_boleto + 'T00:00:00');
+        const dias = Math.ceil((d - today) / 86400000);
+        return `<div class="alert-item" onclick="verDetalhe('${m.id}')" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer">
+          <span><strong style="font-family:var(--mono);color:var(--accent)">${m.veiculos?.placa || '—'}</strong> | ${m.orgao_autuador} | R$ ${parseFloat(m.valor || 0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2})}</span>
+          <span style="font-size:11px;color:var(--${g.cor});font-weight:600">${dias === 0 ? 'hoje' : `${dias}d`}</span>
+        </div>`;
+      }).join('');
+      return `<div style="margin-bottom:.75rem">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin:.25rem 0 .5rem 0">
+          <span style="font-size:12px;font-weight:600;color:var(--${g.cor})">${g.label}</span>
+          <span class="badge badge-${g.cor === 'text2' ? 'info' : g.cor}">R$ ${subtotal.toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2})}</span>
         </div>
-        <div style="display:flex;align-items:center;gap:10px">
-          <span style="font-size:12px;font-family:var(--mono)">R$ ${parseFloat(m.valor).toLocaleString('pt-BR',{minimumFractionDigits:2})}</span>
-          <span style="font-size:11px;color:var(--${cls});font-weight:500">${dias === 0 ? 'hoje' : dias + 'd'}</span>
-        </div>
+        <div>${itensHtml}</div>
       </div>`;
     }).join('');
-    const footerButton = `<div style="padding-top:12px;display:flex;justify-content:flex-end">
-      <button class="btn btn-sm" onclick="abrirMultasProximosDias(30)">Ver detalhes (${venc30.length})</button>
-    </div>`;
-    vencDiv.innerHTML = htmlItems + footerButton;
+
+    vencDiv.innerHTML = htmlGrupos || '<div style="padding:.75rem 0;font-size:13px;color:var(--success)">Nenhum vencimento nos próximos 30 dias</div>';
   }
 
   // Gráfico: multas por mês (últimos 8 meses)
@@ -1154,29 +1145,44 @@ function renderDashboard() {
     </div>`).join('');
 }
 
-function renderUrgentAlerts({ boletoAlerts = [], condutorAlerts = [] } = {}) {
+function renderUrgentAlerts({
+  semBoletoPendencias = [],
+  condutorNaoIndicadoPendencias = [],
+  aguardandoConfirmacaoPendencias = []
+} = {}) {
   const alertList = document.getElementById('alert-list');
-  const btnBoleto = document.getElementById('btn-alerta-boleto');
-  const btnCondutor = document.getElementById('btn-alerta-condutor');
+  if (!alertList) return;
 
-  if (btnBoleto) btnBoleto.classList.toggle('btn-accent', urgentAlertMode === 'boleto');
-  if (btnCondutor) btnCondutor.classList.toggle('btn-accent', urgentAlertMode === 'condutor');
+  const secao = (titulo, itens, emptyColor = 'text3') => `
+    <div style="margin-bottom:.9rem">
+      <div style="font-size:12px;color:var(--text2);font-weight:600;margin:.25rem 0 .5rem 0">${titulo}</div>
+      ${itens.length ? itens.join('') : `<div style="font-size:12px;color:var(--${emptyColor});padding:.2rem 0 .4rem 0">Nenhuma pendência nesta categoria</div>`}
+    </div>`;
 
-  const alerts = urgentAlertMode === 'condutor' ? condutorAlerts : boletoAlerts;
-  const emptyLabel = urgentAlertMode === 'condutor'
-    ? 'Nenhum alerta de prazo de condutor no momento'
-    : 'Nenhum alerta de vencimento de boleto no momento';
+  const semBoletoItems = semBoletoPendencias.map(m => `<div class="alert-item danger" onclick="verDetalhe('${m.id}')" style="cursor:pointer">
+      <span><strong style="font-family:var(--mono)">${m.veiculos?.placa || '—'}</strong> · ${m.orgao_autuador} · R$ ${parseFloat(m.valor || 0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2})}</span>
+      <span class="badge badge-danger">sem boleto</span>
+    </div>`);
 
-  if (alerts.length === 0) {
-    alertList.innerHTML = `<div class="empty-state" style="text-align:left;padding:1rem 0;color:var(--success)">${emptyLabel}</div>`;
-    return;
-  }
+  const condutorItems = condutorNaoIndicadoPendencias.map(m => {
+    const badgeClass = m.diasPrazo <= 3 ? 'danger' : m.diasPrazo <= 10 ? 'warning' : 'info';
+    const prazo = m.diasPrazo < 0 ? `${Math.abs(m.diasPrazo)}d venc.` : m.diasPrazo === 0 ? 'vence hoje' : `${m.diasPrazo}d`;
+    return `<div class="alert-item ${badgeClass}" onclick="verDetalhe('${m.id}')" style="cursor:pointer">
+      <span><strong style="font-family:var(--mono)">${m.veiculos?.placa || '—'}</strong> · ${m.orgao_autuador} · prazo ${prazo}</span>
+      <span class="badge badge-${badgeClass}">${prazo}</span>
+    </div>`;
+  });
 
-  alertList.innerHTML = alerts.slice(0, 6).map(a => `
-    <div class="alert-item ${a.tipo}">
-      <span>${a.text}</span>
-      <span class="badge badge-${a.tipo}">${a.badge}</span>
-    </div>`).join('');
+  const aguardandoItems = aguardandoConfirmacaoPendencias.map(m => `<div class="alert-item info" onclick="verDetalhe('${m.id}')" style="cursor:pointer">
+      <span><strong style="font-family:var(--mono)">${m.veiculos?.placa || '—'}</strong> · ${m.orgao_autuador} · R$ ${parseFloat(m.valor || 0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2})}</span>
+      <span style="font-size:11px;color:var(--text2)">venc. ${m.data_vencimento_boleto ? fmt(m.data_vencimento_boleto) : '—'}</span>
+    </div>`);
+
+  alertList.innerHTML = [
+    secao('Sem boleto disponível', semBoletoItems),
+    secao('Condutor não indicado', condutorItems),
+    secao('Aguardando confirmação', aguardandoItems)
+  ].join('');
 }
 
 function setUrgentAlertMode(mode) {
