@@ -923,10 +923,7 @@ function renderDashboard() {
   const today = new Date(); today.setHours(0,0,0,0);
   const in7 = new Date(today); in7.setDate(in7.getDate() + 7);
   const in30 = new Date(today); in30.setDate(in30.getDate() + 30);
-  const isCondutorIndicado = (multa) => {
-    const value = multa?.condutor_indicado;
-    return value === 'true';
-  };
+  const isCondutorIndicado = (multa) => multa?.condutor_indicado === 'true';
 
   const pendentes = allMultas.filter(m => m.status !== 'confirmado');
   const valorAberto = pendentes.reduce((s, m) => s + parseFloat(m.valor || 0), 0);
@@ -936,7 +933,7 @@ function renderDashboard() {
     return d >= today && d <= in7;
   });
   const semBoleto = allMultas.filter(m => !m.boleto_disponivel && m.status !== 'confirmado');
-  const condutorPendente = allMultas.filter(m => !isCondutorIndicado(m));
+  const condutorPendente = allMultas.filter(m => m.condutor_indicado !== 'true');
   const pagas = allMultas.filter(m => m.status === 'confirmado');
 
   document.getElementById('kpi-total').textContent = allMultas.length;
