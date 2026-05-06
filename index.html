@@ -875,6 +875,11 @@ async function apiGet(table, params = '') {
   }
 }
 
+// SQL (executar no Supabase antes do deploy):
+// ALTER TABLE multas
+// ALTER COLUMN condutor_indicado TYPE text
+// USING condutor_indicado::text;
+
 // ---- Load data ----
 async function loadAll() {
   const [multas, veiculos] = await Promise.all([
@@ -924,9 +929,10 @@ function renderDashboard() {
   // Ações pendentes
   const semBoletoPendencias = allMultas.filter(m => !m.boleto_disponivel && m.status !== 'confirmado');
   const condutorNaoIndicadoPendencias = allMultas.filter(m => {
-    if (isCondutorIndicado(m) || !m.prazo_indicacao_condutor) return false;
+    if (!m.prazo_indicacao_condutor || isCondutorIndicado(m)) return false;
     const d = new Date(m.prazo_indicacao_condutor + 'T00:00:00');
-    return !Number.isNaN(d.getTime());
+    if (Number.isNaN(d.getTime())) return false;
+    return d >= today;
   }).map(m => {
     const d = new Date(m.prazo_indicacao_condutor + 'T00:00:00');
     const dias = Math.ceil((d - today) / 86400000);
@@ -1209,9 +1215,15 @@ function renderUrgentAlerts({
     const dias = m.prazo_indicacao_condutor
       ? Math.ceil((new Date(m.prazo_indicacao_condutor + 'T00:00:00') - today) / 86400000)
       : null;
+    const naoIdentificadoBadge = m.condutor_indicado === 'nao_identificado'
+      ? '<span class="badge badge-gray">não identificado</span>'
+      : '';
     return `<div onclick="verDetalhe('${m.id}')" style="${itemBaseStyle}">
       <span><strong style="font-family:var(--mono);color:var(--accent)">${m.veiculos?.placa || '—'}</strong> · ${m.orgao_autuador} · prazo ${m.prazo_indicacao_condutor ? fmt(m.prazo_indicacao_condutor) : '—'}</span>
-      ${dias !== null ? urgencyBadgeWithDate(dias, m.prazo_indicacao_condutor, true) : ''}
+      <span style="display:inline-flex;align-items:center;gap:6px">
+        ${naoIdentificadoBadge}
+        ${dias !== null ? urgencyBadgeWithDate(dias, m.prazo_indicacao_condutor, true) : ''}
+      </span>
     </div>`;
   });
 
@@ -1385,7 +1397,8 @@ function verDetalhe(id) {
     <div style="display:flex;gap:10px;margin-bottom:1.5rem;flex-wrap:wrap">
       ${statusBadge(m.status)}
       ${m.boleto_disponivel ? '<span class="badge badge-success">boleto disponível</span>' : '<span class="badge badge-warning">sem boleto</span>'}
-      ${!m.condutor_indicado && m.prazo_indicacao_condutor ? '<span class="badge badge-warning">condutor não indicado</span>' : ''}
+      ${String(m.condutor_indicado) === 'false' && m.prazo_indicacao_condutor ? '<span class="badge badge-warning">condutor não indicado</span>' : ''}
+      ${m.condutor_indicado === 'nao_identificado' && m.prazo_indicacao_condutor ? '<span class="badge badge-gray">condutor não identificado</span>' : ''}
     </div>
 
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:1.25rem;margin-bottom:1.25rem">
@@ -1404,10 +1417,10 @@ function verDetalhe(id) {
       <div class="card">
         <div class="card-title">Condutor infrator</div>
         <div class="detail-grid">
-          <div class="detail-field"><label>Condutor indicado</label><span class="${m.condutor_indicado ? 'success' : 'warning'}">${m.condutor_indicado ? 'Sim' : 'Não'}</span></div>
+          <div class="detail-field"><label>Condutor indicado</label><span class="${m.condutor_indicado === 'nao_identificado' ? 'danger' : String(m.condutor_indicado) === 'true' ? 'success' : 'warning'}">${m.condutor_indicado === 'nao_identificado' ? 'Não foi possível identificar' : String(m.condutor_indicado) === 'true' ? 'Sim' : 'Não'}</span></div>
           <div class="detail-field"><label>Prazo para indicação</label><span class="${diasRestantes(m.prazo_indicacao_condutor) <= 5 ? 'danger' : ''}">${fmt(m.prazo_indicacao_condutor)}${m.prazo_indicacao_condutor ? ` · ${diasRestantes(m.prazo_indicacao_condutor)} dias` : ''}</span></div>
-          <div class="detail-field"><label>Nome do condutor</label><span>${m.nome_condutor || '—'}</span></div>
-          <div class="detail-field"><label>CNH</label><span class="mono">${m.cnh_condutor || '—'}</span></div>
+          ${m.condutor_indicado === 'nao_identificado' ? '' : `<div class="detail-field"><label>Nome do condutor</label><span>${m.nome_condutor || '—'}</span></div>
+          <div class="detail-field"><label>CNH</label><span class="mono">${m.cnh_condutor || '—'}</span></div>`}
         </div>
       </div>
     </div>
@@ -1553,15 +1566,16 @@ function editarMulta() {
         <div class="form-field">
           <label>Condutor indicado</label>
           <select id="e-condutor-indicado">
-            <option value="false" ${!m.condutor_indicado?'selected':''}>Não</option>
-            <option value="true" ${m.condutor_indicado?'selected':''}>Sim</option>
+            <option value="false" ${String(m.condutor_indicado) === 'false' ? 'selected' : ''}>Não indicado</option>
+            <option value="true" ${String(m.condutor_indicado) === 'true' ? 'selected' : ''}>Indicado</option>
+            <option value="nao_identificado" ${m.condutor_indicado === 'nao_identificado' ? 'selected' : ''}>Não foi possível identificar</option>
           </select>
         </div>
         <div class="form-field">
           <label>Prazo para indicação</label>
           <input type="date" id="e-prazo-condutor" value="${m.prazo_indicacao_condutor||''}" style="width:100%">
         </div>
-        <div class="form-field">
+        <div class="form-field" id="e-nome-condutor-field">
           <label>Nome do condutor</label>
           <select id="e-nome-condutor-select" onchange="onCondutorNomeSelectChange()" style="width:100%">
             ${condutorOptions}
@@ -1574,7 +1588,7 @@ function editarMulta() {
             style="width:100%;margin-top:8px;${!isNomeExistente && nomeAtual ? '' : 'display:none;'}"
           >
         </div>
-        <div class="form-field">
+        <div class="form-field" id="e-cnh-condutor-field">
           <label>CNH do condutor</label>
           <input type="text" id="e-cnh-condutor" value="${m.cnh_condutor||''}" placeholder="Número da CNH" style="width:100%">
         </div>
@@ -1587,6 +1601,9 @@ function editarMulta() {
     </div>
   `;
   onCondutorNomeSelectChange();
+  updateCondutorFieldsVisibility();
+  const condutorIndicadoSelect = document.getElementById('e-condutor-indicado');
+  if (condutorIndicadoSelect) condutorIndicadoSelect.addEventListener('change', updateCondutorFieldsVisibility);
 }
 
 function onCondutorNomeSelectChange() {
@@ -1603,6 +1620,17 @@ function onCondutorNomeSelectChange() {
     const cnhExistente = condutoresData[select.value]?.cnh || '';
     if (inputCnh && cnhExistente && !inputCnh.value.trim()) inputCnh.value = cnhExistente;
   }
+}
+
+function updateCondutorFieldsVisibility() {
+  const select = document.getElementById('e-condutor-indicado');
+  const nomeField = document.getElementById('e-nome-condutor-field');
+  const cnhField = document.getElementById('e-cnh-condutor-field');
+  if (!select || !nomeField || !cnhField) return;
+
+  const hideCondutor = select.value === 'nao_identificado';
+  nomeField.style.display = hideCondutor ? 'none' : '';
+  cnhField.style.display = hideCondutor ? 'none' : '';
 }
 
 function getNomeCondutorFormValue() {
@@ -1624,7 +1652,7 @@ async function salvarEdicaoMulta(id) {
     data_vencimento_boleto: document.getElementById('e-dt-vencimento').value || null,
     valor_pago: document.getElementById('e-valor-pago').value ? parseFloat(document.getElementById('e-valor-pago').value) : null,
     data_pagamento: document.getElementById('e-dt-pagamento').value || null,
-    condutor_indicado: document.getElementById('e-condutor-indicado').value === 'true',
+    condutor_indicado: document.getElementById('e-condutor-indicado').value,
     prazo_indicacao_condutor: document.getElementById('e-prazo-condutor').value || null,
     nome_condutor: nomeCondutor,
     cnh_condutor: document.getElementById('e-cnh-condutor').value || null,
