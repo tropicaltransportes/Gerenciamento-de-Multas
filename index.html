@@ -891,10 +891,14 @@ async function apiGet(table, params = '') {
   }
 }
 
-// SQL (executar no Supabase antes do deploy):
+// Execute este comando no Supabase SQL Editor ANTES de subir o código:
 // ALTER TABLE multas
 // ALTER COLUMN condutor_indicado TYPE text
-// USING condutor_indicado::text;
+// USING CASE
+//   WHEN condutor_indicado = true THEN 'true'
+//   WHEN condutor_indicado = false THEN 'false'
+//   ELSE 'false'
+// END;
 
 // ---- Load data ----
 async function loadAll() {
@@ -921,7 +925,7 @@ function renderDashboard() {
   const in30 = new Date(today); in30.setDate(in30.getDate() + 30);
   const isCondutorIndicado = (multa) => {
     const value = multa?.condutor_indicado;
-    return value === true || value === 'true' || value === 1 || value === '1';
+    return value === 'true';
   };
 
   const pendentes = allMultas.filter(m => m.status !== 'confirmado');
@@ -1474,7 +1478,7 @@ function verDetalhe(id) {
     <div style="display:flex;gap:10px;margin-bottom:1.5rem;flex-wrap:wrap">
       ${statusBadge(m.status)}
       ${m.boleto_disponivel ? '<span class="badge badge-success">boleto disponível</span>' : '<span class="badge badge-warning">sem boleto</span>'}
-      ${String(m.condutor_indicado) === 'false' && m.prazo_indicacao_condutor ? '<span class="badge badge-warning">condutor não indicado</span>' : ''}
+      ${m.condutor_indicado === 'false' && m.prazo_indicacao_condutor ? '<span class="badge badge-warning">condutor não indicado</span>' : ''}
       ${m.condutor_indicado === 'nao_identificado' && m.prazo_indicacao_condutor ? '<span class="badge badge-gray">condutor não identificado</span>' : ''}
     </div>
 
@@ -1494,7 +1498,7 @@ function verDetalhe(id) {
       <div class="card">
         <div class="card-title">Condutor infrator</div>
         <div class="detail-grid">
-          <div class="detail-field"><label>Condutor indicado</label><span class="${m.condutor_indicado === 'nao_identificado' ? 'danger' : String(m.condutor_indicado) === 'true' ? 'success' : 'warning'}">${m.condutor_indicado === 'nao_identificado' ? 'Não foi possível identificar' : String(m.condutor_indicado) === 'true' ? 'Sim' : 'Não'}</span></div>
+          <div class="detail-field"><label>Condutor indicado</label><span class="${m.condutor_indicado === 'nao_identificado' ? 'danger' : m.condutor_indicado === 'true' ? 'success' : 'warning'}">${m.condutor_indicado === 'nao_identificado' ? 'Não foi possível identificar' : m.condutor_indicado === 'true' ? 'Sim' : 'Não'}</span></div>
           <div class="detail-field"><label>Prazo para indicação</label><span class="${diasRestantes(m.prazo_indicacao_condutor) <= 5 ? 'danger' : ''}">${fmt(m.prazo_indicacao_condutor)}${m.prazo_indicacao_condutor ? ` · ${diasRestantes(m.prazo_indicacao_condutor)} dias` : ''}</span></div>
           ${m.condutor_indicado === 'nao_identificado' ? '' : `<div class="detail-field"><label>Nome do condutor</label><span>${m.nome_condutor || '—'}</span></div>
           <div class="detail-field"><label>CNH</label><span class="mono">${m.cnh_condutor || '—'}</span></div>`}
@@ -1555,6 +1559,7 @@ async function salvarMulta() {
     valor: parseFloat(valor),
     status: document.getElementById('f-status-form').value,
     boleto_disponivel: document.getElementById('f-status-form').value === 'encaminhado',
+    condutor_indicado: 'false',
     updated_at: new Date().toISOString()
   };
 
@@ -1643,8 +1648,8 @@ function editarMulta() {
         <div class="form-field">
           <label>Condutor indicado</label>
           <select id="e-condutor-indicado">
-            <option value="false" ${String(m.condutor_indicado) === 'false' ? 'selected' : ''}>Não indicado</option>
-            <option value="true" ${String(m.condutor_indicado) === 'true' ? 'selected' : ''}>Indicado</option>
+            <option value="false" ${m.condutor_indicado === 'false' ? 'selected' : ''}>Não indicado</option>
+            <option value="true" ${m.condutor_indicado === 'true' ? 'selected' : ''}>Indicado</option>
             <option value="nao_identificado" ${m.condutor_indicado === 'nao_identificado' ? 'selected' : ''}>Não foi possível identificar</option>
           </select>
         </div>
