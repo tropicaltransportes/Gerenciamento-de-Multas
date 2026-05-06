@@ -30,6 +30,7 @@
     --alert-danger-border: rgba(255, 77, 79, 0.5);
     --alert-warning-border: rgba(255, 212, 59, 0.55);
     --alert-info-border: rgba(0, 198, 59, 0.4);
+    --border-info: rgba(0, 198, 59, 0.4);
     --radius: 10px;
     --radius-sm: 6px;
     --font: 'DM Sans', sans-serif;
@@ -229,6 +230,19 @@
 
   /* Filters */
   .filter-row { display: flex; gap: 8px; margin-bottom: 1.25rem; flex-wrap: wrap; align-items: center; }
+  .multas-filter-banner {
+    background: var(--info-bg);
+    border: 1px solid var(--border-info, var(--alert-info-border));
+    color: var(--info);
+    border-radius: var(--radius-sm);
+    padding: 10px 14px;
+    font-size: 13px;
+    margin-bottom: 1rem;
+    display: none;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+  }
   select, input[type="text"], input[type="date"], input[type="number"] {
     background: var(--bg2);
     border: 1px solid var(--border);
@@ -591,7 +605,7 @@
                 </div>
                 <div class="chart-slide">
                   <div class="card-title">Infrações por condutor identificado</div>
-                  <canvas id="chart-condutores" class="dashboard-chart" height="180"></canvas>
+                  <canvas id="chart-condutores" class="dashboard-chart" height="220"></canvas>
                   <div id="chart-condutores-empty" class="empty-state" style="display:none;padding:2rem 1rem">Sem condutores identificados ainda.</div>
                 </div>
               </div>
@@ -634,6 +648,7 @@
             <option value="7">Vencendo em 7 dias</option>
           </select>
         </div>
+        <div id="multas-filter-banner" class="multas-filter-banner"></div>
         <div class="card" style="padding:0;overflow:hidden">
           <div class="table-wrap">
             <table>
@@ -797,6 +812,7 @@ const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZ
 let chartMensal = null;
 let chartVeiculos = null;
 let chartCondutores = null;
+let multasFiltroCondutor = null;
 let dashboardSlideIndex = 0;
 let urgentAlertMode = 'boleto';
 let allMultas = [];
@@ -1085,14 +1101,19 @@ function renderDashboard() {
   }
 
   // Gráfico: infrações por condutor identificado (top 10)
-  const byCondutor = {};
+  const condutorData = {};
   allMultas.forEach(m => {
     const nome = (m.nome_condutor || '').trim();
-    if (!nome || !m.condutor_indicado) return;
-    const label = nome.toUpperCase();
-    byCondutor[label] = (byCondutor[label] || 0) + 1;
+    if (!nome || !isCondutorIndicado(m)) return;
+    if (!condutorData[nome]) condutorData[nome] = { total: 0, valor: 0, placas: new Set() };
+    condutorData[nome].total += 1;
+    condutorData[nome].valor += parseFloat(m.valor || 0);
+    const placa = m.veiculos?.placa;
+    if (placa) condutorData[nome].placas.add(placa);
   });
-  const topCondutores = Object.entries(byCondutor).sort((a,b) => b[1]-a[1]).slice(0,10);
+  const topCondutores = Object.entries(condutorData)
+    .sort((a,b) => b[1].total - a[1].total)
+    .slice(0,10);
   const ctxC = document.getElementById('chart-condutores');
   const condutoresEmpty = document.getElementById('chart-condutores-empty');
   if (ctxC) {
@@ -1109,19 +1130,49 @@ function renderDashboard() {
           labels: topCondutores.map(x => x[0]),
           datasets: [{
             label: 'Infrações',
-            data: topCondutores.map(x => x[1]),
+            data: topCondutores.map(x => x[1].total),
             backgroundColor: 'rgba(106,159,212,0.55)',
             borderColor: '#6a9fd4',
             borderWidth: 1,
-            borderRadius: 4
+            borderRadius: 4,
+            barPercentage: 0.6,
+            categoryPercentage: 0.7
           }]
         },
         options: {
           responsive: true,
           maintainAspectRatio: false,
-          plugins: { legend: { display: false } },
+          layout: { padding: { top: 10, bottom: 10 } },
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              enabled: true,
+              callbacks: {
+                title: (items) => items?.[0]?.label || '',
+                label: (item) => {
+                  const nomeCondutor = item?.label || '';
+                  const dados = condutorData[nomeCondutor];
+                  if (!dados) return [];
+                  const placas = Array.from(dados.placas);
+                  return [
+                    `Multas: ${dados.total}`,
+                    `Valor total: R$ ${dados.valor.toLocaleString('pt-BR', {minimumFractionDigits:2})}`,
+                    `Veículos: ${placas.length ? placas.join(', ') : '—'}`
+                  ];
+                }
+              }
+            }
+          },
+          onClick: (event, elements) => {
+            if (!elements.length) return;
+            const index = elements[0].index;
+            const nomeCondutor = topCondutores[index]?.[0];
+            if (!nomeCondutor) return;
+            filtrarPorCondutor(nomeCondutor);
+            showPage('multas');
+          },
           scales: {
-            x: { ticks: { color: '#5a5754', font: { size: 10 } }, grid: { display: false } },
+            x: { ticks: { display: false }, grid: { display: false } },
             y: { ticks: { color: '#5a5754', font: { size: 11 }, stepSize: 1 }, grid: { color: 'rgba(255,255,255,0.04)' }, beginAtZero: true }
           }
         }
@@ -1312,9 +1363,25 @@ function renderMultasList() {
       return d >= today && d <= end;
     });
   }
+  if (multasFiltroCondutor) {
+    filtered = filtered.filter(m => (m.nome_condutor || '').trim() === multasFiltroCondutor);
+  }
 
   const tbody = document.getElementById('multas-tbody');
   if (!tbody) return;
+  const filterBanner = document.getElementById('multas-filter-banner');
+  if (filterBanner) {
+    if (multasFiltroCondutor) {
+      filterBanner.style.display = 'flex';
+      filterBanner.innerHTML = `
+        <span>Filtrando por condutor: <strong>${multasFiltroCondutor}</strong></span>
+        <button class="btn btn-sm" type="button" onclick="limparFiltroCondutor()">✕ Limpar filtro</button>
+      `;
+    } else {
+      filterBanner.style.display = 'none';
+      filterBanner.innerHTML = '';
+    }
+  }
   if (filtered.length === 0) {
     tbody.innerHTML = '<tr><td colspan="6" class="empty-state">Nenhuma multa encontrada</td></tr>';
     return;
@@ -1333,6 +1400,16 @@ function renderMultasList() {
       <td>${statusBadge(m.status)}</td>
     </tr>`;
   }).join('');
+}
+
+function filtrarPorCondutor(nome) {
+  multasFiltroCondutor = (nome || '').trim();
+  renderMultasList();
+}
+
+function limparFiltroCondutor() {
+  multasFiltroCondutor = null;
+  renderMultasList();
 }
 
 // ---- Veículos ----
